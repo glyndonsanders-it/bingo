@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f4bff">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Human Bingo – Host</title>
+<link rel="stylesheet" href="/app.css">
+<style>
+.hostgrid{display:grid;gap:14px;grid-template-columns:minmax(300px,1fr) minmax(320px,1.35fr);align-items:start}
+.hostgrid .panel{margin:0}
+@media (max-width:860px){.hostgrid{grid-template-columns:1fr}}
+.col{display:grid;gap:14px}
+.codecard{text-align:center}
+.bigcode{font:800 clamp(2.6rem,9vw,4.4rem)/1 'Bricolage Grotesque',system-ui,sans-serif;letter-spacing:.18em;color:var(--band);margin:6px 0 10px;padding-left:.18em}
+.qr{width:min(100%,260px);aspect-ratio:1;margin:0 auto 10px;display:block;background:#fff;border-radius:12px;padding:8px}
+.joinurl{font-weight:700;word-break:break-all;margin:0 0 12px}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 14px}
+.stat{flex:1;min-width:110px;background:var(--soft);border-radius:12px;padding:10px 12px}
+.stat b{display:block;font-size:1.8rem;line-height:1.1}
+.stat span{color:var(--muted);font-size:.85rem;font-weight:600}
+.wins{list-style:none;margin:0;padding:0;display:grid;gap:6px;max-height:340px;overflow:auto}
+.wins li{display:flex;gap:10px;align-items:center;background:var(--soft);border-radius:10px;padding:8px 10px;font-weight:700}
+.wins .o{background:var(--hi);color:var(--navy);border-radius:8px;min-width:2.2em;text-align:center;padding:2px 6px;font-weight:800}
+.wins .k{margin-left:auto;font-size:.8rem;color:var(--muted)}
+.plist{display:grid;gap:6px;max-height:62vh;overflow:auto;padding-right:4px}
+.prow{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;background:var(--soft);border:2px solid transparent;border-radius:10px;padding:8px 10px;cursor:pointer;text-align:left;font:inherit;color:var(--ink)}
+.prow:hover{border-color:var(--line)}
+.prow .dot{width:10px;height:10px;border-radius:50%;background:#b7bad6}
+.prow .dot.on{background:var(--ok)}
+.prow .nm2{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .meter{height:6px;border-radius:3px;background:var(--line);margin-top:4px;overflow:hidden}
+.prow .meter i{display:block;height:100%;background:var(--bg)}
+.prow .badges{display:flex;gap:4px;font-size:.78rem;font-weight:800;white-space:nowrap}
+.badge{background:var(--hi);color:var(--navy);border-radius:6px;padding:2px 6px}
+.badge.b2{background:var(--band);color:#fff}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.filters input{flex:1;min-width:160px}
+.seg{display:inline-flex;border:2px solid var(--line);border-radius:999px;overflow:hidden}
+.seg button{font:inherit;font-weight:600;border:0;background:transparent;color:var(--ink);padding:6px 12px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--paper)}
+#prompts{min-height:210px}
+.locked-note{background:var(--soft);border-radius:10px;padding:8px 12px;font-weight:600;margin:0 0 12px}
+/* category manager */
+.catlayout{display:grid;grid-template-columns:200px 1fr;gap:16px}
+@media (max-width:640px){.catlayout{grid-template-columns:1fr}}
+.catlist{display:grid;gap:6px;align-content:start;max-height:60vh;overflow:auto}
+.catlist button{font:inherit;text-align:left;border:2px solid var(--line);background:var(--soft);color:var(--ink);border-radius:10px;padding:8px 10px;cursor:pointer}
+.catlist button[aria-current=true]{border-color:var(--ink);background:var(--paper);font-weight:700}
+.catlist small{display:block;color:var(--muted)}
+#cSquares{min-height:240px}
+/* player card dialog */
+#cardGrid{display:grid;gap:6px;margin:10px 0}
+#cardGrid .cell{cursor:default}
+#cardGrid .cam{position:absolute;right:4px;top:3px;font-size:.8rem}
+/* projector mode */
+body.proj main{max-width:none}
+body.proj .hostgrid{grid-template-columns:1fr 1fr}
+body.proj .noproj{display:none!important}
+body.proj .bigcode{font-size:min(16vw,10rem)}
+body.proj .qr{width:min(42vh,100%)}
+body.proj .joinurl{font-size:1.6rem}
+body.proj .stat b{font-size:3.2rem}
+body.proj .wins li{font-size:1.5rem}
+body.proj .tag{max-width:640px}
+#sheet{display:none}
+@media print{
+body.pr{background:#fff;color:#000}
+body.pr main>*:not(#sheet){display:none!important}
+body.pr #sheet{display:block}
+.pc{break-inside:avoid;page-break-after:always;padding:8mm}
+.pc h2{text-align:center;font-size:20pt;margin:0 0 6mm;color:#000}
+.pg{display:grid}
+.pcell{border:1.5px solid #000;aspect-ratio:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:4px;font-size:11pt;color:#000;background:#fff;overflow-wrap:anywhere}
+.pcell.fr{background:#eee;font-weight:800}
+}
+</style>
+</head>
+<body>
+<main class="wide">
+<div class="tag"><div class="band">Hello, you’re hosting</div><input id="title" maxlength="40" aria-label="Game title"></div>
+
+<p class="err noprint" id="fatal" role="alert" hidden style="background:var(--paper);padding:14px;border-radius:12px;text-align:center"></p>
+
+<!-- Room dashboard -->
+<div id="roomv" class="hostgrid" hidden>
+  <div class="col">
+    <section class="panel codecard">
+      <h2>Room code</h2>
+      <div class="bigcode" id="bigCode">·····</div>
+      <img class="qr" id="qr" alt="QR code to join this room">
+      <p class="joinurl" id="joinUrl"></p>
+      <div class="row tight noproj" style="justify-content:center;margin:0">
+        <button class="btn alt" id="copyLink">Copy join link</button>
+        <button class="btn alt" id="copyHost">Copy host link</button>
+        <button class="btn" id="projBtn">Show on projector</button>
+      </div>
+      <div class="row tight" style="justify-content:center;margin:10px 0 0" hidden id="projExit"><button class="btn alt" id="projOff">Exit projector view</button></div>
+    </section>
+    <section class="panel">
+      <div class="row" style="justify-content:space-between;margin:0 0 10px"><h2 style="margin:0">Game</h2><span class="pill" id="statusPill">Lobby</span></div>
+      <div class="stats">
+        <div class="stat"><b id="sPlayers">0</b><span>players joined</span></div>
+        <div class="stat"><b id="sOnline">0</b><span>online now</span></div>
+        <div class="stat"><b id="sBingo">0</b><span>bingos called</span></div>
+      </div>
+      <div class="row tight noproj" style="margin:0">
+        <button class="btn big" id="startBtn">Start game</button>
+        <button class="btn red" id="endBtn" hidden>End game</button>
+        <button class="btn alt" id="resumeBtn" hidden>Resume game</button>
+      </div>
+      <p class="hint muted noproj" id="gameHint"></p>
+    </section>
+    <section class="panel">
+      <h2>Bingo calls</h2>
+      <p>In the order the server received them. Tap one to check that player’s card.</p>
+      <ol class="wins" id="wins"></ol>
+    </section>
+  </div>
+  <div class="col noproj">
+    <section class="panel">
+      <h2>Players</h2>
+      <div class="filters">
+        <input id="search" placeholder="Search players" aria-label="Search players">
+        <div class="seg" role="group" aria-label="Filter players">
+          <button data-f="all" aria-pressed="true">All</button><button data-f="online" aria-pressed="false">Online</button><button data-f="bingo" aria-pressed="false">Bingo</button>
+        </div>
+      </div>
+      <div class="plist" id="plist"></div>
+    </section>
+    <div id="setSlot"></div>
+  </div>
+</div>
+
+<!-- Game settings (builder before the room exists; lobby editor after) -->
+<section class="panel" id="setPanel">
+  <h2 id="setH">1. Build your game</h2>
+  <p id="setP">Pick a category or write your own squares. Add more squares than a card holds and every player gets a different card.</p>
+  <div class="locked-note" id="lockedNote" hidden>🔒 Squares are locked while the game is running.</div>
+  <div class="row">
+    <label for="size">Card size</label>
+    <select id="size"><option value="3">3 × 3</option><option value="4">4 × 4</option><option value="5">5 × 5</option></select>
+    <label><input type="checkbox" id="free"> Free center square</label>
+  </div>
+  <div class="row tight" style="margin:0 0 6px;justify-content:space-between"><label>Categories</label><button class="btn alt" id="manageCats">✏️ Edit categories</button></div>
+  <div class="chips" id="chips" role="group" aria-label="Categories"></div>
+  <label for="prompts">Squares, one per line</label>
+  <textarea id="prompts" spellcheck="true"></textarea>
+  <p class="hint muted" id="hint" aria-live="polite"></p>
+  <div class="row tight" style="margin:12px 0 0">
+    <button class="btn alt" id="saveAsCat">Save squares as a category</button>
+    <button class="btn alt" id="printb">Print paper cards</button>
+    <input type="number" id="cnt" min="1" max="300" value="10" aria-label="Number of cards to print">
+    <span style="flex:1"></span>
+    <button class="btn" id="saveSettings" hidden>Save changes</button>
+  </div>
+  <p class="err" id="setErr" role="alert"></p>
+</section>
+
+<section class="panel" id="createPanel">
+  <h2>2. Create your room</h2>
+  <p>Players join with a short room code. Leave it blank to get a random one, or pick your own (letters and numbers, up to 5).</p>
+  <div class="row">
+    <label for="customCode">Room code</label>
+    <input id="customCode" class="code-in" maxlength="5" placeholder="AUTO" autocomplete="off" autocapitalize="characters" style="width:11rem;font-size:1.4rem!important">
+    <button class="btn big" id="createBtn">Create room</button>
+  </div>
+  <p class="err" id="createErr" role="alert"></p>
+</section>
+
+<div id="sheet"></div>
+</main>
+
+<dialog id="catDlg" class="wide" aria-labelledby="catH">
+  <h3 id="catH">Categories</h3>
+  <p class="sub">Every category is yours to edit, rename, duplicate or delete. They’re saved on this device; use Export to move them to another one.</p>
+  <div class="catlayout">
+    <div>
+      <div class="catlist" id="catList"></div>
+      <button class="btn alt block" id="catNew" style="margin-top:8px">＋ New category</button>
+    </div>
+    <div>
+      <div class="field"><label for="cName">Category name</label><input id="cName" maxlength="30"></div>
+      <div class="field"><label for="cTitle">Card title</label><input id="cTitle" maxlength="40"></div>
+      <div class="field"><label for="cSquares">Squares, one per line</label><textarea id="cSquares"></textarea><span class="hint muted" id="cCount"></span></div>
+      <div class="row tight" style="justify-content:flex-start">
+        <button class="btn" id="catUse">Use for this game</button>
+        <button class="btn alt" id="catDup">Duplicate</button>
+        <button class="btn alt" id="catDel">Delete</button>
+      </div>
+    </div>
+  </div>
+  <div class="row tight" style="justify-content:space-between;margin:14px 0 0">
+    <span class="row tight" style="margin:0"><button class="btn alt" id="catReset">Restore built-in lists</button><button class="btn alt" id="catExport">Export</button><button class="btn alt" id="catImport">Import</button><input type="file" id="catFile" accept="application/json,.json" hidden></span>
+    <button class="btn" id="catDone">Done</button>
+  </div>
+</dialog>
+
+<dialog id="cardDlg" class="wide" aria-labelledby="cardH">
+  <h3 id="cardH"></h3>
+  <p class="sub" id="cardSub"></p>
+  <div id="cardGrid"></div>
+  <div class="row"><button class="btn alt red" id="kickBtn" hidden>Remove player</button><button class="btn" id="cardClose">Close</button></div>
+</dialog>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/categories.js"></script>
+<script src="/host.js"></script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f4bff">
+<meta name="referrer" content="no-referrer">
+<title>Find Someone Who… – Player</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<main>
+<div class="tag"><div class="band">Hello, we’re playing</div><div class="tv" id="title">Find Someone Who…</div></div>
+
+<section id="join" class="panel noprint" hidden>
+<h2>Join a room</h2>
+<p>Enter the room code from the host’s screen and your name. Then mingle: find someone who fits a square, write their name or snap a photo, and complete a line to call bingo.</p>
+<form id="jf">
+<div class="field"><label for="code">Room code</label><input id="code" class="code-in" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCDE"></div>
+<div class="field"><label for="name">Your name</label><input id="name" maxlength="24" autocomplete="nickname" autocapitalize="words" placeholder="e.g. Sam Rivera"></div>
+<p class="err" id="err" role="alert"></p>
+<button class="btn big block" id="go">Join room</button>
+</form>
+</section>
+
+<section id="wait" class="panel noprint" hidden style="text-align:center">
+<h2 id="waitH">You’re in!</h2>
+<p id="waitP">Waiting for the host to start the game…</p>
+<p style="font:700 2.4rem/1 'Caveat',cursive;color:var(--ink);margin:6px 0 12px" id="waitCount"></p>
+<button class="btn alt" id="leave1">Leave room</button>
+</section>
+
+<section id="msg" class="panel noprint" hidden style="text-align:center"><h2 id="msgH"></h2><p id="msgP"></p><a class="btn" href="/">Back to start</a></section>
+
+<section id="play" hidden>
+<div id="banner" class="banner" hidden role="status"></div>
+<div class="bar noprint">
+<button class="btn line" id="clear">Clear all</button>
+<button class="btn line" id="save">Save photos</button>
+<button class="btn line" id="leave">Leave room</button>
+</div>
+<div id="grid"></div>
+<p id="status" class="noprint" aria-live="polite"></p>
+<p id="net" class="noprint" style="text-align:center;font-weight:600;opacity:.85;margin:6px 0 0"></p>
+</section>
+</main>
+
+<dialog id="dlg">
+<h3 id="dq"></h3>
+<p class="sub" id="dsub">Who fits this square? Add their name, a photo, or both.</p>
+<img id="pv" class="pv" alt="Photo for this square" hidden>
+<div class="row photo" id="photoRow"><button class="btn alt" id="pt">Take photo</button><button class="btn alt" id="pc">Choose photo</button><button class="btn alt" id="ps" hidden>Save photo</button><button class="btn alt" id="pr" hidden>Remove photo</button></div>
+<input type="file" id="f1" accept="image/*" capture="environment" hidden><input type="file" id="f2" accept="image/*" hidden>
+<input id="dn" maxlength="24" placeholder="Their name" autocomplete="off" aria-label="Name of the person">
+<div class="row"><button class="btn alt" id="dc">Cancel</button><button class="btn alt" id="dx">Clear</button><button class="btn" id="ds">Save</button></div>
+</dialog>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/play.js"></script>
+</body>
+</html>

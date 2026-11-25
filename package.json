@@ -1,0 +1,31 @@
+{
+  "name": "human-bingo-rooms",
+  "version": "2.0.0",
+  "description": "Find Someone Who… human bingo with live rooms and short room codes",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/glyndonsanders-it/bingo.git"
+  },
+  "bugs": {
+    "url": "https://github.com/glyndonsanders-it/bingo/issues"
+  },
+  "homepage": "https://github.com/glyndonsanders-it/bingo#readme",
+  "dependencies": {
+    "@fontsource/bricolage-grotesque": "^5.3.0",
+    "@fontsource/caveat": "^5.3.0",
+    "express": "^4.22.3",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.4"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.5"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.4"
+  }
+}
