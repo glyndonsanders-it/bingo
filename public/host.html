@@ -55,6 +55,15 @@
 #cardGrid{display:grid;gap:6px;margin:10px 0}
 #cardGrid .cell{cursor:default}
 #cardGrid .cam{position:absolute;right:4px;top:3px;font-size:.8rem}
+.wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.wall figure{margin:0;position:relative;border-radius:10px;overflow:hidden;background:var(--soft);aspect-ratio:1;cursor:zoom-in}
+.wall img{width:100%;height:100%;object-fit:cover;display:block}
+.wall figcaption{position:absolute;left:0;right:0;bottom:0;background:rgba(20,22,58,.78);color:#fff;font-size:.75rem;font-weight:600;padding:4px 6px;line-height:1.25}
+#cardGrid .cell.ph-cell{cursor:zoom-in}
+dialog.lightbox{width:100vw;height:100vh;max-width:none;max-height:none;margin:0;border-radius:0;background:transparent;display:grid;place-items:center;padding:20px;cursor:zoom-out}
+dialog.lightbox::backdrop{background:rgba(5,8,40,.92)}
+.lightbox img{max-width:100%;max-height:calc(100vh - 110px);border-radius:12px;border:4px solid #fff}
+.lightbox p{color:#fff;font-weight:700;text-align:center;font-size:1.2rem;margin:10px 0 0}
 /* projector mode */
 body.proj main{max-width:none}
 body.proj .hostgrid{grid-template-columns:1fr 1fr}
@@ -64,6 +73,8 @@ body.proj .qr{width:min(42vh,100%)}
 body.proj .joinurl{font-size:1.6rem}
 body.proj .stat b{font-size:3.2rem}
 body.proj .wins li{font-size:1.5rem}
+body.proj .wall{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+body.proj .wall figcaption{font-size:1rem}
 body.proj .tag{max-width:640px}
 #sheet{display:none}
 @media print{
@@ -104,7 +115,7 @@ body.pr #sheet{display:block}
       <div class="stats">
         <div class="stat"><b id="sPlayers">0</b><span>players joined</span></div>
         <div class="stat"><b id="sOnline">0</b><span>online now</span></div>
-        <div class="stat"><b id="sBingo">0</b><span>bingos called</span></div>
+        <div class="stat"><b id="sBingo">0</b><span id="sBingoL">bingos called</span></div>
       </div>
       <div class="row tight noproj" style="margin:0">
         <button class="btn big" id="startBtn">Start game</button>
@@ -114,9 +125,14 @@ body.pr #sheet{display:block}
       <p class="hint muted noproj" id="gameHint"></p>
     </section>
     <section class="panel">
-      <h2>Bingo calls</h2>
+      <h2 id="winsH">Bingo calls</h2>
       <p>In the order the server received them. Tap one to check that player’s card.</p>
       <ol class="wins" id="wins"></ol>
+    </section>
+    <section class="panel" id="wallPanel">
+      <div class="row" style="justify-content:space-between;margin:0 0 4px"><h2 style="margin:0">Photo wall</h2><label class="noproj"><input type="checkbox" id="wallProj" checked> Show on projector</label></div>
+      <p id="wallP">Newest photos from players. They’re deleted from the server as soon as you end the game.</p>
+      <div class="wall" id="wall"></div>
     </section>
   </div>
   <div class="col noproj">
@@ -125,7 +141,7 @@ body.pr #sheet{display:block}
       <div class="filters">
         <input id="search" placeholder="Search players" aria-label="Search players">
         <div class="seg" role="group" aria-label="Filter players">
-          <button data-f="all" aria-pressed="true">All</button><button data-f="online" aria-pressed="false">Online</button><button data-f="bingo" aria-pressed="false">Bingo</button>
+          <button data-f="all" aria-pressed="true">All</button><button data-f="online" aria-pressed="false">Online</button><button data-f="bingo" aria-pressed="false">Winners</button>
         </div>
       </div>
       <div class="plist" id="plist"></div>
@@ -143,6 +159,10 @@ body.pr #sheet{display:block}
     <label for="size">Card size</label>
     <select id="size"><option value="3">3 × 3</option><option value="4">4 × 4</option><option value="5">5 × 5</option></select>
     <label><input type="checkbox" id="free"> Free center square</label>
+  </div>
+  <div class="row">
+    <label for="winMode">How to win</label>
+    <select id="winMode"><option value="line">1 line — a row, column or diagonal</option><option value="blackout">Blackout — fill the whole card</option></select>
   </div>
   <div class="row tight" style="margin:0 0 6px;justify-content:space-between"><label>Categories</label><button class="btn alt" id="manageCats">✏️ Edit categories</button></div>
   <div class="chips" id="chips" role="group" aria-label="Categories"></div>

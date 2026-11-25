@@ -26,6 +26,7 @@
 <section id="wait" class="panel noprint" hidden style="text-align:center">
 <h2 id="waitH">You’re in!</h2>
 <p id="waitP">Waiting for the host to start the game…</p>
+<p id="waitMode" style="font-weight:700;color:var(--ink);margin:0 0 10px"></p>
 <p style="font:700 2.4rem/1 'Caveat',cursive;color:var(--ink);margin:6px 0 12px" id="waitCount"></p>
 <button class="btn alt" id="leave1">Leave room</button>
 </section>
@@ -36,7 +37,7 @@
 <div id="banner" class="banner" hidden role="status"></div>
 <div class="bar noprint">
 <button class="btn line" id="clear">Clear all</button>
-<button class="btn line" id="save">Save photos</button>
+<button class="btn line" id="save">Save card &amp; photos</button>
 <button class="btn line" id="leave">Leave room</button>
 </div>
 <div id="grid"></div>
@@ -54,6 +55,20 @@
 <input id="dn" maxlength="24" placeholder="Their name" autocomplete="off" aria-label="Name of the person">
 <div class="row"><button class="btn alt" id="dc">Cancel</button><button class="btn alt" id="dx">Clear</button><button class="btn" id="ds">Save</button></div>
 </dialog>
+
+<dialog id="saveDlg" class="wide" aria-labelledby="saveH">
+<h3 id="saveH">Save your card &amp; photos</h3>
+<p class="sub"><b>Press and hold a picture</b>, then choose <b>Download image</b> (Android) or <b>Save to Photos</b> (iPhone). You can also just take a screenshot.</p>
+<div id="saveList" class="savelist"><p class="muted">Making your pictures…</p></div>
+<div class="row"><button class="btn alt" id="shareAll" hidden>Share all</button><button class="btn alt" id="dlAll">Download all</button><button class="btn" id="saveClose">Close</button></div>
+</dialog>
+<style>
+#saveDlg{max-height:92dvh;overflow:auto}
+.savelist{display:grid;gap:14px;margin:0 0 12px}
+.savelist figure{margin:0}
+.savelist img{width:100%;height:auto;border-radius:12px;display:block;-webkit-touch-callout:default;user-select:auto}
+.savelist figcaption{font-size:.85rem;color:var(--muted);margin-top:4px}
+</style>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/play.js"></script>

@@ -9,16 +9,19 @@ Tested with **300 and 600 simulated players in one room** (see *Scale* below).
 **Host** (`/host`)
 - **Customizable categories:** the four starter lists (Icebreakers, Team & work, Party, Classroom) are fully editable. You can rename them, change the card title, edit the squares, duplicate, delete, add new categories, restore the built-ins, and export or import them as a JSON file to use on another device. You can also save any squares you typed as a new category.
 - Card size 3 × 3, 4 × 4 or 5 × 5, with an optional free center. If you add more squares than a card holds, every player gets a different shuffled card.
+- **How to win:** **1 line** (any row, column or diagonal) or **Blackout** (fill the whole card). It locks when the game starts.
 - **Room codes:** you get a random 5-character code (no look-alike characters such as 0/O or 1/I), or you can type your own (1–5 letters/numbers).
-- A live dashboard with the code, a QR code, the join link, player counts (joined/online), every player's progress, and the bingo calls in the order the server received them. Tap any player to see their card.
+- A live dashboard with the code, a QR code, the join link, player counts (joined/online), every player's progress, and the winners in the order the server received them. Tap any player to see their card **with their photos**, and tap a photo to enlarge it.
+- **Photo wall:** the newest photos stream in live, and you can choose whether they show on the projector.
 - **Start / End / Resume.** Players who join before the start wait on a "get ready" screen. Late arrivals get a card immediately.
 - Squares stay editable in the lobby and lock when the game starts. You can remove players. **Show on projector** gives a big-screen view of the code, QR and winners. You can still print paper cards.
 
 **Players** (`/join/CODE`, or type the code on the home page)
 - Same card and dialog as before: their name, a photo (camera or gallery), or both. Completed lines are highlighted, and Blackout is called when the whole card is full.
 - Progress syncs to the server, so refreshing or losing signal doesn't lose the card. Changes made offline sync on reconnect.
-- **Photos never leave the phone.** They're stored on the device (IndexedDB), and only a "has photo" flag is sent. **Save photos** exports captioned tiles to the share sheet or downloads.
-- Everyone sees the first 20 bingo calls announced. Each player always sees their own place ("BINGO! You're #7").
+- **Photos are a temporary session.** While the game runs, a smaller copy of each photo is uploaded so the host can see it. **Only the host and the player who took it can open it.** When the host presses **End game**, every uploaded photo is **deleted from the server**. Players keep the full-size originals on their own phones. As a safety net, an hourly sweep also deletes photos from rooms that ended or are older than a day.
+- **Save card & photos:** creates one picture of the whole card (photos, names and the title) plus a captioned picture for each photo. Players press and hold a picture to save it, which works on Android and iPhone, or use **Share** / **Download**, or just take a screenshot.
+- Everyone sees the first 20 winners announced. Each player always sees their own place ("BINGO! You're #7").
 
 ## Run locally
 
@@ -54,8 +57,10 @@ Keep **one replica**: rooms and live updates run in a single process. That proce
 
 | Players | Joins | Cards dealt | Square saves (p95 / max) | Peak server memory |
 |---|---|---|---|---|
-| 300 | 300/300 | 23 ms | 4 ms / 27 ms | ~120 MB |
+| 300 (+1,800 photo uploads) | 300/300 | 59 ms | 3 ms / 16 ms (photos: 7 ms / 20 ms) | ~120 MB |
 | 600 | 600/600 | 49 ms | 10 ms / 61 ms | — |
+
+Photos are stored temporarily under `DATA_DIR/photos` (about 60–100 KB each) and deleted when each game ends.
 
 The host dashboard and lobby counts are batched (at most a few updates per second), so a join rush doesn't flood phones.
 

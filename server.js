@@ -20,7 +20,9 @@ const MAX_PROMPTS = 300;
 const MAX_PROMPT_LEN = 80;
 const MAX_TITLE = 40;
 const MAX_NAME = 24;
-fs.mkdirSync(DATA_DIR, { recursive: true });
+const PHOTO_DIR = path.join(DATA_DIR, 'photos'); // temporary: wiped when a game ends
+const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
+fs.mkdirSync(PHOTO_DIR, { recursive: true });
 
 // ───────────────────────── Database ─────────────────────────
 const db = new DatabaseSync(path.join(DATA_DIR, 'bingo.db'));
@@ -68,11 +70,13 @@ CREATE TABLE IF NOT EXISTS bingos (
 );
 CREATE INDEX IF NOT EXISTS bingos_room ON bingos(room_code);
 `);
+try { db.exec("ALTER TABLE rooms ADD COLUMN win_mode TEXT NOT NULL DEFAULT 'line'"); } catch (e) { /* already there */ }
 
 const q = {
   room: db.prepare('SELECT * FROM rooms WHERE code = ?'),
-  insertRoom: db.prepare('INSERT INTO rooms (code, host_key, title, size, free, prompts_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
-  updateSettings: db.prepare('UPDATE rooms SET title = ?, size = ?, free = ?, prompts_json = ? WHERE code = ?'),
+  insertRoom: db.prepare('INSERT INTO rooms (code, host_key, title, size, free, prompts_json, win_mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
+  updateSettings: db.prepare('UPDATE rooms SET title = ?, size = ?, free = ?, prompts_json = ?, win_mode = ? WHERE code = ?'),
+  allRooms: db.prepare('SELECT code, status, created_at FROM rooms'),
   setStatus: db.prepare('UPDATE rooms SET status = ?, started_at = COALESCE(started_at, ?), ended_at = ? WHERE code = ?'),
   players: db.prepare('SELECT * FROM players WHERE room_code = ? AND kicked = 0 ORDER BY join_no'),
   playerCount: db.prepare('SELECT COUNT(*) AS c FROM players WHERE room_code = ? AND kicked = 0'),
@@ -82,12 +86,17 @@ const q = {
   insertPlayer: db.prepare('INSERT INTO players (id, room_code, token, name, join_no, card_json, joined_at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
   setCard: db.prepare('UPDATE players SET card_json = ? WHERE id = ?'),
   kick: db.prepare('UPDATE players SET kicked = 1 WHERE id = ?'),
-  marks: db.prepare('SELECT cell, name, photo FROM marks WHERE player_id = ?'),
+  marks: db.prepare('SELECT cell, name, photo, updated_at FROM marks WHERE player_id = ?'),
   roomMarks: db.prepare('SELECT m.player_id, m.cell, m.name, m.photo FROM marks m JOIN players p ON p.id = m.player_id WHERE p.room_code = ? AND p.kicked = 0'),
   upsertMark: db.prepare(`INSERT INTO marks (player_id, cell, name, photo, updated_at) VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(player_id, cell) DO UPDATE SET name = excluded.name, photo = excluded.photo, updated_at = excluded.updated_at`),
   deleteMark: db.prepare('DELETE FROM marks WHERE player_id = ? AND cell = ?'),
   clearMarks: db.prepare('DELETE FROM marks WHERE player_id = ?'),
+  mark: db.prepare('SELECT * FROM marks WHERE player_id = ? AND cell = ?'),
+  setPhotoFlag: db.prepare('UPDATE marks SET photo = 1, updated_at = ? WHERE player_id = ? AND cell = ?'),
+  insertPhotoOnly: db.prepare("INSERT OR IGNORE INTO marks (player_id, cell, name, photo, updated_at) VALUES (?, ?, '', 1, ?)"),
+  dropRoomPhotoFlags: db.prepare('UPDATE marks SET photo = 0 WHERE photo = 1 AND player_id IN (SELECT id FROM players WHERE room_code = ?)'),
+  recentPhotos: db.prepare('SELECT m.player_id, m.cell, m.name, m.updated_at FROM marks m JOIN players p ON p.id = m.player_id WHERE p.room_code = ? AND p.kicked = 0 AND m.photo = 1 ORDER BY m.updated_at DESC LIMIT ?'),
   bingos: db.prepare('SELECT b.*, p.name, p.join_no FROM bingos b JOIN players p ON p.id = b.player_id WHERE b.room_code = ? ORDER BY b.id'),
   insertBingo: db.prepare('INSERT OR IGNORE INTO bingos (room_code, player_id, kind, at) VALUES (?, ?, ?, ?)'),
   countBingo: db.prepare('SELECT COUNT(*) AS c FROM bingos WHERE room_code = ? AND kind = ?'),
@@ -130,7 +139,8 @@ function validateSettings(b) {
     .slice(0, MAX_PROMPTS);
   const need = cellsNeeded(size, free);
   if (prompts.length < need) return { error: `Add at least ${need} different squares for a ${size} × ${size} card` };
-  return { title, size, free, prompts };
+  const winMode = b.winMode === 'blackout' ? 'blackout' : 'line';
+  return { title, size, free, prompts, winMode };
 }
 
 function shuffle(a) {
@@ -170,7 +180,7 @@ const progressCache = new Map(); // playerId -> {filled,total,lines}
 const online = new Map(); // playerId -> open socket count
 function marksMap(playerId) {
   const m = {};
-  for (const r of q.marks.all(playerId)) m[r.cell] = { n: r.name, p: !!r.photo };
+  for (const r of q.marks.all(playerId)) m[r.cell] = { n: r.name, p: !!r.photo, u: r.updated_at };
   return m;
 }
 function progressFor(p) {
@@ -201,35 +211,34 @@ function roomView(r) {
     title: r.title,
     size: r.size,
     free: !!r.free,
+    winMode: r.win_mode,
     status: r.status,
     playerCount: players.length,
-    winners: winners(r.code, labels).slice(0, 50),
+    winners: winners(r.code, labels).filter((w) => w.kind === winKind(r)).slice(0, 50),
   };
 }
 function hostView(r) {
   const players = q.players.all(r.code);
   const labels = labelMap(players);
-  const win = winners(r.code, labels);
-  const firstBingo = {};
-  const blackout = {};
-  win.forEach((w, i) => {
-    if (w.kind === 'bingo' && !firstBingo[w.playerId]) firstBingo[w.playerId] = win.filter((x, j) => j <= i && x.kind === 'bingo').length;
-    if (w.kind === 'blackout') blackout[w.playerId] = true;
-  });
+  const win = winners(r.code, labels).filter((w) => w.kind === winKind(r));
+  const rank = {};
+  win.forEach((w, i) => { rank[w.playerId] = i + 1; });
   return {
     code: r.code,
     title: r.title,
     size: r.size,
     free: !!r.free,
+    winMode: r.win_mode,
     prompts: r.prompts,
     status: r.status,
     createdAt: r.created_at,
     playerCount: players.length,
     onlineCount: players.filter((p) => online.get(p.id)).length,
-    players: players.map((p) => ({ id: p.id, name: labels[p.id], joinNo: p.join_no, online: !!online.get(p.id), ...progressFor(p), bingo: firstBingo[p.id] || 0, blackout: !!blackout[p.id] })),
+    players: players.map((p) => ({ id: p.id, name: labels[p.id], joinNo: p.join_no, online: !!online.get(p.id), ...progressFor(p), rank: rank[p.id] || 0 })),
     winners: win,
   };
 }
+const winKind = (r) => (r.win_mode === 'blackout' ? 'blackout' : 'bingo');
 function meView(p) {
   return { id: p.id, name: p.name, card: p.card_json ? JSON.parse(p.card_json) : null, marks: marksMap(p.id) };
 }
@@ -265,7 +274,7 @@ app.post('/api/rooms', express.json({ limit: '64kb' }), (req, res) => {
     if (q.room.get(code)) return res.status(409).json({ error: `Room code ${code} is already taken — try another` });
   } else code = genCode();
   const key = rid(18);
-  q.insertRoom.run(code, key, s.title, s.size, s.free ? 1 : 0, JSON.stringify(s.prompts), now());
+  q.insertRoom.run(code, key, s.title, s.size, s.free ? 1 : 0, JSON.stringify(s.prompts), s.winMode, now());
   recent.push(now());
   createLog.set(ip, recent);
   log(code, `room created (${s.size}×${s.size}, ${s.prompts.length} squares)`);
@@ -276,6 +285,66 @@ app.get('/api/rooms/:code', (req, res) => {
   const r = getRoom(req.params.code);
   if (!r) return res.status(404).json({ error: 'No room with that code' });
   res.json({ code: r.code, title: r.title, status: r.status });
+});
+
+// ── Temporary photo session ──
+// Photos are uploaded during a game so the host can see them, and deleted from the server when the game ends.
+const photoPath = (code, pid, cell) => path.join(PHOTO_DIR, code, `${pid}_${cell}.jpg`);
+function purgePhotos(code) {
+  fs.rmSync(path.join(PHOTO_DIR, code), { recursive: true, force: true });
+  q.dropRoomPhotoFlags.run(code);
+}
+function deletePhoto(code, pid, cell) {
+  fs.rmSync(photoPath(code, pid, cell), { force: true });
+}
+// Safety net: remove photo folders of ended, missing or day-old rooms.
+function sweepPhotos() {
+  const rooms = Object.fromEntries(q.allRooms.all().map((r) => [r.code, r]));
+  for (const dir of fs.readdirSync(PHOTO_DIR)) {
+    const r = rooms[dir];
+    if (!r || r.status !== 'live' || now() - r.created_at > 24 * 3600e3) purgePhotos(dir);
+  }
+}
+sweepPhotos();
+setInterval(sweepPhotos, 3600e3).unref();
+
+app.post('/api/photo', express.raw({ type: () => true, limit: MAX_PHOTO_BYTES }), (req, res) => {
+  const p = q.playerByToken.get(String(req.get('x-player-token') || ''));
+  if (!p || p.kicked) return res.status(401).json({ error: 'Join the room first' });
+  const r = getRoom(p.room_code);
+  if (!r || r.status !== 'live') return res.status(409).json({ error: 'Photos can only be added while the game is running' });
+  const card = p.card_json && JSON.parse(p.card_json);
+  const cell = Number(req.get('x-cell'));
+  if (!card || !Number.isInteger(cell) || cell < 0 || cell >= card.length || card[cell].f) return res.status(400).json({ error: 'Not a square on your card' });
+  const buf = req.body;
+  if (!Buffer.isBuffer(buf) || buf.length < 100 || buf[0] !== 0xff || buf[1] !== 0xd8) return res.status(400).json({ error: 'Send a JPEG photo' });
+  fs.mkdirSync(path.join(PHOTO_DIR, r.code), { recursive: true });
+  fs.writeFileSync(photoPath(r.code, p.id, cell), buf);
+  const t = now();
+  if (!q.setPhotoFlag.run(t, p.id, cell).changes) q.insertPhotoOnly.run(p.id, cell, t);
+  const pr = progressOf(card, marksMap(p.id));
+  progressCache.set(p.id, pr);
+  const m = q.mark.get(p.id, cell);
+  io.to(`host:${r.code}`).emit('fx', { type: 'photo', playerId: p.id, cell, at: t, prompt: card[cell].t, with: m ? m.name : '', player: p.name });
+  pushHost(r.code);
+  res.json({ ok: true, v: t });
+});
+
+app.get('/photo/:code/:pid/:cell.jpg', (req, res) => {
+  const r = getRoom(req.params.code);
+  if (!r) return res.sendStatus(404);
+  let ok = false;
+  if (req.query.k) ok = safeEq(r.host_key, req.query.k);
+  else if (req.query.t) {
+    const p = q.playerByToken.get(String(req.query.t));
+    ok = !!p && p.id === req.params.pid && p.room_code === r.code;
+  }
+  if (!ok) return res.sendStatus(403);
+  const f = photoPath(r.code, String(req.params.pid).replace(/[^\w-]/g, ''), Number(req.params.cell) | 0);
+  if (!fs.existsSync(f)) return res.sendStatus(404);
+  // no-cache: browsers revalidate (cheap 304s), so once a game ends and photos are deleted, they stop showing.
+  res.set('Cache-Control', 'private, no-cache');
+  res.type('image/jpeg').sendFile(f);
 });
 
 app.get('/qr/:code.svg', async (req, res) => {
@@ -342,7 +411,7 @@ io.on('connection', (socket) => {
     if (r.status !== 'lobby') return fail(cb, 'Squares are locked once the game starts');
     const s = validateSettings(body);
     if (s.error) return fail(cb, s.error);
-    q.updateSettings.run(s.title, s.size, s.free ? 1 : 0, JSON.stringify(s.prompts), r.code);
+    q.updateSettings.run(s.title, s.size, s.free ? 1 : 0, JSON.stringify(s.prompts), s.winMode, r.code);
     pushNow(r.code);
     ack(cb, { ok: true });
   });
@@ -374,6 +443,8 @@ io.on('connection', (socket) => {
     if (!r) return;
     if (r.status !== 'live') return fail(cb, 'The game is not running');
     q.setStatus.run('ended', now(), now(), r.code);
+    purgePhotos(r.code);
+    log(r.code, 'game ended — uploaded photos deleted');
     pushNow(r.code);
     io.to(`room:${r.code}`).emit('fx', { type: 'end' });
     ack(cb, { ok: true });
@@ -396,6 +467,18 @@ io.on('connection', (socket) => {
     io.to(`p:${p.id}`).emit('kicked');
     pushNow(r.code);
     ack(cb, { ok: true });
+  });
+  socket.on('host:photos', ({ limit } = {}, cb) => {
+    const r = hostRoom(cb);
+    if (!r) return;
+    const players = Object.fromEntries(q.players.all(r.code).map((p) => [p.id, p]));
+    const cards = {};
+    const rows = q.recentPhotos.all(r.code, Math.min(200, Number(limit) || 40)).filter((m) => players[m.player_id]).map((m) => {
+      const p = players[m.player_id];
+      const card = cards[p.id] || (cards[p.id] = p.card_json ? JSON.parse(p.card_json) : []);
+      return { playerId: p.id, cell: m.cell, at: m.updated_at, prompt: card[m.cell] ? card[m.cell].t : '', with: m.name, player: p.name };
+    });
+    ack(cb, { ok: true, photos: rows });
   });
   socket.on('host:card', ({ playerId } = {}, cb) => {
     const r = hostRoom(cb);
@@ -460,19 +543,24 @@ io.on('connection', (socket) => {
     cell = Number(cell);
     if (!card || !Number.isInteger(cell) || cell < 0 || cell >= card.length || card[cell].f) return fail(cb, 'Not a square on your card');
     const nm = clean(name, MAX_NAME);
-    if (nm || photo) q.upsertMark.run(p.id, cell, nm, photo ? 1 : 0, now());
+    const prev = q.mark.get(p.id, cell);
+    // The photo flag is set by the upload itself; a mark can only keep or drop it.
+    const keepPhoto = !!photo && !!prev && !!prev.photo;
+    if (prev && prev.photo && !photo) deletePhoto(r.code, p.id, cell);
+    if (nm || keepPhoto || photo) q.upsertMark.run(p.id, cell, nm, keepPhoto ? 1 : 0, now());
     else q.deleteMark.run(p.id, cell);
     const pr = progressOf(card, marksMap(p.id));
     progressCache.set(p.id, pr);
     const events = [];
     let label = null; // full-roster lookup only when someone actually scores
     const nameOf = () => label || (label = labelMap(q.players.all(r.code))[p.id] || p.name);
-    if (pr.lines > 0 && q.insertBingo.run(r.code, p.id, 'bingo', now()).changes) {
+    const mode = r.win_mode === 'blackout' ? 'blackout' : 'line';
+    if (mode === 'line' && pr.lines > 0 && q.insertBingo.run(r.code, p.id, 'bingo', now()).changes) {
       const order = q.countBingo.get(r.code, 'bingo').c;
       events.push({ type: 'bingo', name: nameOf(), order, playerId: p.id });
       log(r.code, `BINGO #${order}: ${nameOf()}`);
     }
-    if (pr.filled === pr.total && q.insertBingo.run(r.code, p.id, 'blackout', now()).changes) {
+    if (mode === 'blackout' && pr.filled === pr.total && q.insertBingo.run(r.code, p.id, 'blackout', now()).changes) {
       const order = q.countBingo.get(r.code, 'blackout').c;
       events.push({ type: 'blackout', name: nameOf(), order, playerId: p.id });
       log(r.code, `BLACKOUT #${order}: ${nameOf()}`);
@@ -491,6 +579,8 @@ io.on('connection', (socket) => {
     const c = me(cb);
     if (!c) return;
     if (c.r.status !== 'live') return fail(cb, 'The game is not running');
+    const card = c.p.card_json ? JSON.parse(c.p.card_json) : [];
+    card.forEach((_, i) => deletePhoto(c.r.code, c.p.id, i)); // only this player's photos
     q.clearMarks.run(c.p.id);
     progressCache.delete(c.p.id);
     pushHost(c.r.code);

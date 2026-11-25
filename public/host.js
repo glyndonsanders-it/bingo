@@ -37,12 +37,13 @@
   }
   function readForm() {
     const size = +$('#size').value;
-    return { title: $('#title').value.trim() || 'Find Someone Who…', size, free: $('#free').checked && size % 2 === 1, prompts: list() };
+    return { title: $('#title').value.trim() || 'Find Someone Who…', size, free: $('#free').checked && size % 2 === 1, winMode: $('#winMode').value, prompts: list() };
   }
   function fillForm(s) {
     $('#title').value = s.title;
     $('#size').value = s.size;
     $('#free').checked = !!s.free;
+    $('#winMode').value = s.winMode === 'blackout' ? 'blackout' : 'line';
     $('#prompts').value = (s.prompts || []).join('\n');
     refresh();
   }
@@ -64,7 +65,7 @@
   function locked() { return !!S && S.status !== 'lobby'; }
   function onEdit() { if (S) dirty = true; refresh(); }
   ['#title', '#prompts'].forEach((s) => $(s).addEventListener('input', onEdit));
-  ['#size', '#free'].forEach((s) => $(s).addEventListener('change', onEdit));
+  ['#size', '#free', '#winMode'].forEach((s) => $(s).addEventListener('change', onEdit));
 
   function renderChips() {
     $('#chips').innerHTML = cats.map((c) => `<button class="btn alt" data-cat="${esc(c.id)}">${esc(c.name)} <span class="muted">· ${c.p.length}</span></button>`).join('');
@@ -248,6 +249,10 @@
     socket.on('connect', auth);
     socket.on('state', apply);
     socket.on('fx', (fx) => {
+      if (fx.type === 'photo') {
+        wall = [fx].concat(wall.filter((w) => !(w.playerId === fx.playerId && w.cell === fx.cell))).slice(0, 40);
+        renderWall();
+      }
       if (fx.type === 'bingo') toast(`🎉 BINGO #${fx.order} — ${fx.name}`);
       if (fx.type === 'blackout') toast(`⭐ BLACKOUT #${fx.order} — ${fx.name}`);
     });
@@ -263,6 +268,7 @@
       $('#fatal').hidden = true;
       enterRoomMode();
       apply(r.state);
+      loadWall();
     });
   }
   function emit(ev, data) {
@@ -285,9 +291,9 @@
   function apply(s) {
     const prevStatus = S && S.status;
     S = s;
-    if (!dirty) fillForm({ title: s.title, size: s.size, free: s.free, prompts: s.prompts });
+    if (!dirty) fillForm({ title: s.title, size: s.size, free: s.free, winMode: s.winMode, prompts: s.prompts });
     const lock = locked();
-    ['#title', '#prompts', '#size'].forEach((x) => { $(x).disabled = lock; });
+    ['#title', '#prompts', '#size', '#winMode'].forEach((x) => { $(x).disabled = lock; });
     $('#title').readOnly = lock;
     $('#lockedNote').hidden = !lock;
     $('#setP').textContent = lock ? 'These are the squares players are using.' : 'You can change the squares until you start the game.';
@@ -306,28 +312,30 @@
       : s.status === 'live' ? 'Late arrivals can still join and get a card right away.' : 'The game is over. Players can still see their cards and the winners.';
     $('#sPlayers').textContent = s.playerCount;
     $('#sOnline').textContent = s.onlineCount;
-    $('#sBingo').textContent = s.winners.filter((w) => w.kind === 'bingo').length;
+    const bo = s.winMode === 'blackout';
+    $('#sBingo').textContent = s.winners.length;
+    $('#sBingoL').textContent = bo ? 'blackouts called' : 'bingos called';
+    $('#winsH').textContent = bo ? 'Blackout calls' : 'Bingo calls';
+    if (s.status === 'ended') { wall = []; renderWall(); }
     renderWins();
     renderPlayers();
     if (prevStatus && prevStatus !== s.status && s.status === 'live' && prevStatus === 'lobby') toast(`Game started — ${s.playerCount} cards dealt`);
   }
   function renderWins() {
-    const n = { bingo: 0, blackout: 0 };
-    $('#wins').innerHTML = S.winners.map((w) => {
-      n[w.kind]++;
-      return `<li data-pid="${esc(w.playerId)}" style="cursor:pointer"><span class="o">#${n[w.kind]}</span><span>${esc(w.name)}</span><span class="k">${w.kind === 'blackout' ? '⭐ Blackout' : '🎉 Bingo'} · ${new Date(w.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span></li>`;
-    }).join('') || '<li class="muted" style="font-weight:600">No bingos yet.</li>';
+    $('#wins').innerHTML = S.winners.map((w, i) => {
+      return `<li data-pid="${esc(w.playerId)}" style="cursor:pointer"><span class="o">#${i + 1}</span><span>${esc(w.name)}</span><span class="k">${w.kind === 'blackout' ? '⭐ Blackout' : '🎉 Bingo'} · ${new Date(w.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span></li>`;
+    }).join('') || `<li class="muted" style="font-weight:600">No ${S.winMode === 'blackout' ? 'blackouts' : 'bingos'} yet.</li>`;
   }
   function renderPlayers() {
     const qs = $('#search').value.trim().toLowerCase();
     let ps = S.players.slice();
     if (filter === 'online') ps = ps.filter((p) => p.online);
-    if (filter === 'bingo') ps = ps.filter((p) => p.bingo);
+    if (filter === 'bingo') ps = ps.filter((p) => p.rank);
     if (qs) ps = ps.filter((p) => p.name.toLowerCase().includes(qs));
-    ps.sort((a, b) => (a.bingo || 1e9) - (b.bingo || 1e9) || b.lines - a.lines || b.filled - a.filled || a.joinNo - b.joinNo);
+    ps.sort((a, b) => (a.rank || 1e9) - (b.rank || 1e9) || b.filled - a.filled || b.lines - a.lines || a.joinNo - b.joinNo);
     $('#plist').innerHTML = ps.map((p) => `<button class="prow" data-pid="${esc(p.id)}"><span class="dot ${p.online ? 'on' : ''}" title="${p.online ? 'Online' : 'Offline'}"></span>
       <span style="min-width:0"><span class="nm2">${esc(p.name)}</span>${p.total ? `<span class="meter"><i style="width:${Math.round((p.filled / p.total) * 100)}%"></i></span>` : ''}</span>
-      <span class="badges">${p.total ? `${p.filled}/${p.total}` : 'waiting'}${p.bingo ? ` <span class="badge">Bingo #${p.bingo}</span>` : ''}${p.blackout ? ' <span class="badge b2">★</span>' : ''}</span></button>`).join('')
+      <span class="badges">${p.total ? `${p.filled}/${p.total}` : 'waiting'}${p.rank ? ` <span class="badge">Winner #${p.rank}</span>` : ''}</span></button>`).join('')
       || `<p class="muted">${S.players.length ? 'No players match.' : 'Nobody has joined yet. Share the room code!'}</p>`;
   }
   $('#search').addEventListener('input', () => S && renderPlayers());
@@ -382,7 +390,7 @@
     const p = S.players.find((x) => x.id === pid);
     $('#cardH').textContent = p ? p.name : r.name;
     $('#cardSub').textContent = r.card
-      ? `${r.progress.filled} of ${r.progress.total} squares · ${r.progress.lines} line${r.progress.lines === 1 ? '' : 's'} complete. Names are what the player typed; photos stay on their phone (📷 = has a photo).`
+      ? `${r.progress.filled} of ${r.progress.total} squares · ${r.progress.lines} line${r.progress.lines === 1 ? '' : 's'} complete. Tap a photo to enlarge it.`
       : 'Waiting for the game to start — no card yet.';
     const g = $('#cardGrid');
     if (r.card) {
@@ -391,13 +399,44 @@
       g.className = 's' + z;
       g.innerHTML = r.card.map((c, i) => {
         const m = r.marks[i];
-        return `<div class="cell${c.f ? ' free' : ''}${m && m.n ? ' got' : ''}"><span class="q">${esc(c.t)}</span>${m && m.p ? '<span class="cam" title="Has a photo">📷</span>' : ''}${m && m.n ? `<span class="nm">${esc(m.n)}</span>` : ''}</div>`;
+        const url = m && m.p ? photoUrl(pid, i, m.u) : '';
+        return `<div class="cell${c.f ? ' free' : ''}${m && m.n ? ' got' : ''}${url ? ' has ph-cell' : ''}"${url ? ` data-zoom="${esc(url)}" data-cap="${esc(c.t + (m.n ? ' — with ' + m.n : ''))}"` : ''}>${url ? `<img class="ph" src="${esc(url)}" alt="" loading="lazy">` : ''}<span class="q">${esc(c.t)}</span>${m && m.n ? `<span class="nm">${esc(m.n)}</span>` : ''}</div>`;
       }).join('');
     } else g.innerHTML = '';
     $('#kickBtn').hidden = false;
     $('#cardDlg').showModal();
   }
   $('#cardClose').addEventListener('click', () => $('#cardDlg').close());
+  $('#cardGrid').addEventListener('click', (e) => { const c = e.target.closest('[data-zoom]'); if (c) lightbox(c.dataset.zoom, c.dataset.cap); });
+
+  // ── Photos (temporary: deleted from the server when the game ends) ──
+  const photoUrl = (pid, cell, v) => `/photo/${code}/${encodeURIComponent(pid)}/${cell}.jpg?k=${encodeURIComponent(key)}&v=${v || 0}`;
+  let wall = [];
+  function renderWall() {
+    const el = $('#wall');
+    if (!el) return;
+    el.innerHTML = wall.slice(0, 24).map((w) => {
+      const cap = `${w.player}${w.with ? ' with ' + w.with : ''} — ${w.prompt}`;
+      const url = photoUrl(w.playerId, w.cell, w.at);
+      return `<figure data-zoom="${esc(url)}" data-cap="${esc(cap)}"><img src="${esc(url)}" alt="${esc(cap)}" loading="lazy"><figcaption>${esc(cap)}</figcaption></figure>`;
+    }).join('') || `<p class="muted" style="margin:0">${S && S.status === 'ended' ? 'The game has ended, so the photos were deleted from the server.' : 'No photos yet.'}</p>`;
+  }
+  async function loadWall() {
+    const r = await emit('host:photos', { limit: 40 });
+    if (r.ok) { wall = r.photos; renderWall(); }
+  }
+  $('#wall').addEventListener('click', (e) => { const f = e.target.closest('[data-zoom]'); if (f) lightbox(f.dataset.zoom, f.dataset.cap); });
+  $('#wallProj').addEventListener('change', () => $('#wallPanel').classList.toggle('noproj', !$('#wallProj').checked));
+  // A modal <dialog>, so it stacks above the player-card dialog it may be opened from.
+  function lightbox(url, cap) {
+    const lb = document.createElement('dialog');
+    lb.className = 'lightbox';
+    lb.innerHTML = `<div><img src="${esc(url)}" alt=""><p>${esc(cap || '')}</p></div>`;
+    lb.addEventListener('click', () => lb.close());
+    lb.addEventListener('close', () => lb.remove());
+    document.body.appendChild(lb);
+    lb.showModal();
+  }
   $('#kickBtn').addEventListener('click', async () => {
     const p = S.players.find((x) => x.id === cardPid);
     if (!confirm(`Remove ${p ? p.name : 'this player'} from the room?`)) return;
