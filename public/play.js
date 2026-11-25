@@ -19,6 +19,7 @@
   let cur = -1;
   let pp = '';
   let origPhoto = '';
+  let photoFirst = false; // the picker was opened straight from tapping an empty square
   const pendingUpload = {}; // cell -> true while a photo still has to reach the server
   let connectedOnce = false;
 
@@ -204,22 +205,36 @@
 
   // ── Square dialog ──
   function setPv(d) { pp = d; $('#pv').hidden = !d; if (d) $('#pv').src = d; $('#pr').hidden = !d; $('#ps').hidden = !d; }
+  // Tapping an EMPTY square goes straight to the photo picker (camera or gallery); the name step follows.
+  // Tapping a filled square opens it for checking or editing.
   $('#grid').addEventListener('click', (e) => {
     const c = e.target.closest('.cell');
     if (!c || c.disabled) return;
-    cur = +c.dataset.i;
+    const i = +c.dataset.i;
+    if (R.status === 'live' && !ME.marks[i] && !photos[i]) {
+      cur = i;
+      photoFirst = true;
+      $('#f2').click(); // must run inside the tap, or phones block the picker
+    } else openDialog(i);
+  });
+  function openDialog(i, keepPicked) {
+    cur = i;
     const ended = R.status !== 'live';
     $('#dq').textContent = ME.card[cur].t;
     $('#dn').value = (ME.marks[cur] && ME.marks[cur].n) || '';
     $('#dn').readOnly = ended;
-    $('#dsub').textContent = ended ? 'The game has ended — this square is read-only.' : 'Who fits this square? Add their name, a photo, or both.';
+    $('#dsub').textContent = ended ? 'The game has ended — this square is read-only.'
+      : keepPicked ? 'Nice shot! Now type their name.' : 'Who fits this square? Add a photo and their name.';
     ['#pt', '#pc', '#dx', '#ds'].forEach((s) => ($(s).hidden = ended));
-    setPv(photos[cur] || '');
     origPhoto = photos[cur] || '';
+    if (!keepPicked) setPv(photos[cur] || '');
+    $('#pt').textContent = pp ? 'Retake' : 'Take photo';
+    $('#pc').textContent = pp ? 'Choose another' : 'Choose photo';
     $('#pr').hidden = ended || !pp;
-    $('#dlg').showModal();
+    $('#dn').placeholder = 'Their name';
+    if (!$('#dlg').open) $('#dlg').showModal();
     if (!ended) $('#dn').focus();
-  });
+  }
   async function put(v, p) {
     const cell = cur;
     const name = v.trim().slice(0, 24);
@@ -288,7 +303,7 @@
   function pick(e) {
     const f = e.target.files[0];
     e.target.value = '';
-    if (!f) return;
+    if (!f) { if (photoFirst) { photoFirst = false; openDialog(cur); } return; }
     const url = URL.createObjectURL(f);
     const i = new Image();
     i.onload = () => {
@@ -299,8 +314,10 @@
       c.getContext('2d').drawImage(i, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
       setPv(c.toDataURL('image/jpeg', 0.85));
+      if (photoFirst || !$('#dlg').open) { photoFirst = false; openDialog(cur, true); } // step 2: the name
+      else { $('#pt').textContent = 'Retake'; $('#pc').textContent = 'Choose another'; }
     };
-    i.onerror = () => { URL.revokeObjectURL(url); toast('That photo could not be opened', true); };
+    i.onerror = () => { URL.revokeObjectURL(url); toast('That photo could not be opened', true); if (photoFirst) { photoFirst = false; openDialog(cur); } };
     i.src = url;
   }
   $('#ds').onclick = () => put($('#dn').value, pp);
@@ -308,6 +325,8 @@
   $('#dc').onclick = () => $('#dlg').close();
   $('#f1').onchange = pick;
   $('#f2').onchange = pick;
+  // Picker closed without a photo: still let them type a name for that square.
+  ['#f1', '#f2'].forEach((s) => $(s).addEventListener('cancel', () => { if (photoFirst) { photoFirst = false; openDialog(cur); } }));
   $('#pt').onclick = () => $('#f1').click();
   $('#pc').onclick = () => $('#f2').click();
   $('#pr').onclick = () => setPv('');

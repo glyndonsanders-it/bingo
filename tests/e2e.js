@@ -51,6 +51,19 @@ const CODE = (process.env.CODE || 'T' + Math.random().toString(36).slice(2, 6)).
   ok(`room ${CODE} created; join link ${await hp.textContent('#joinUrl')}`);
   await hp.screenshot({ path: `${OUT}/01-host-room.png` });
 
+  console.log('▶ Big screen opens as its own page (view-only)');
+  const [sp] = await Promise.all([hctx.waitForEvent('page'), hp.click('#projBtn')]);
+  watch(sp, 'screen');
+  await sp.setViewportSize({ width: 1920, height: 1080 });
+  await sp.waitForSelector('#lobbyV.on');
+  assert.strictEqual(await sp.textContent('#lobbyV [data-code]'), CODE);
+  await sp.waitForFunction(() => { const i = document.querySelector('#qrL'); return i.complete && i.naturalWidth > 0; });
+  assert(!(await sp.$('#startBtn, #prompts, #plist')), 'no host controls on the big screen');
+  const screenKey = new URL(sp.url()).hash.slice(3);
+  const escalate = await sp.evaluate(([c, k]) => new Promise((res) => io().emit('host:auth', { code: c, key: k }, (r) => res(r))), [CODE, screenKey]);
+  assert(!escalate.ok, 'big-screen key must not unlock host controls');
+  ok('big screen: code + QR, no controls; its link can’t be used as a host link');
+
   console.log('▶ Three phones join');
   const P = [];
   for (const [i, nm] of ['Ana', 'Ben', 'Cara'].entries()) {
@@ -67,6 +80,9 @@ const CODE = (process.env.CODE || 'T' + Math.random().toString(36).slice(2, 6)).
   await hp.waitForFunction(() => document.querySelector('#sPlayers').textContent === '3');
   await P[0].waitForFunction(() => /3 players/.test(document.querySelector('#waitCount').textContent), null, { timeout: 5000 });
   ok('host sees 3 players; phones see the lobby count');
+  await sp.waitForFunction(() => document.querySelectorAll('#names span').length === 3 && document.querySelector('#lobbyV [data-count]').textContent === '3');
+  ok(`big screen shows the names joining: ${await sp.$$eval('#names span', (n) => n.map((x) => x.textContent).join(', '))}`);
+  await sp.screenshot({ path: `${OUT}/10-screen-lobby.png` });
   await P[0].screenshot({ path: `${OUT}/02-phone-wait.png` });
 
   console.log('▶ Start → cards dealt');
@@ -80,20 +96,38 @@ const CODE = (process.env.CODE || 'T' + Math.random().toString(36).slice(2, 6)).
   assert(await hp.$('#prompts[disabled]'));
   ok('squares locked on the host after start');
 
-  console.log('▶ Ana fills the top row (one with a photo) → BINGO');
+  await sp.waitForSelector('#liveV.on');
+  ok('big screen switched to the live view');
+
+  console.log('▶ Ana fills the top row: tap → photo picker first → then the name → BINGO');
   const photo = path.join(OUT, 'photo.png');
   await hp.screenshot({ path: photo, clip: { x: 0, y: 0, width: 400, height: 300 } });
   const p0 = P[0];
-  for (const i of [0, 1, 2]) {
-    await p0.click(`#grid .cell[data-i="${i}"]`);
-    if (i === 1) {
-      const [fc] = await Promise.all([p0.waitForEvent('filechooser'), p0.click('#pc')]);
-      await fc.setFiles(photo);
-      await p0.waitForSelector('#pv:not([hidden])');
+  // tap an empty square: the photo picker opens right away; pick a photo (or none), then the name box follows
+  async function tapFill(p, i, name, withPhoto) {
+    const [fc] = await Promise.all([p.waitForEvent('filechooser'), p.click(`#grid .cell[data-i="${i}"]`)]);
+    assert(!(await p.$('#dlg[open]')), 'the picker comes before the name dialog');
+    await fc.setFiles(withPhoto ? photo : []);
+    await p.waitForSelector('#dlg[open]');
+    if (withPhoto) {
+      await p.waitForSelector('#pv:not([hidden])');
+      assert.strictEqual(await p.textContent('#dsub'), 'Nice shot! Now type their name.');
     }
-    await p0.fill('#dn', ['Ben', 'Cara', 'Dee'][i]);
-    await p0.click('#ds');
+    assert.strictEqual(await p.evaluate(() => document.activeElement.id), 'dn');
+    await p.fill('#dn', name);
+    await p.click('#ds');
   }
+  await tapFill(p0, 0, 'Ben', true);
+  ok('empty square → photo picker immediately → name box (focused) with the photo shown');
+  await p0.screenshot({ path: `${OUT}/02b-phone-photo-then-name.png` });
+  await tapFill(p0, 1, 'Cara', true);
+  await tapFill(p0, 2, 'Dee', false);
+  ok('closing the picker without a photo still goes to the name box');
+  await p0.click('#grid .cell[data-i="0"]');
+  await p0.waitForSelector('#dlg[open]');
+  assert.strictEqual(await p0.inputValue('#dn'), 'Ben');
+  await p0.click('#dc');
+  ok('tapping a filled square opens it for checking (no picker)');
   await p0.waitForSelector('#banner:not([hidden])');
   assert(/BINGO! You’re #1/.test(await p0.textContent('#banner')));
   ok('Ana: “BINGO! You’re #1”');
@@ -102,14 +136,36 @@ const CODE = (process.env.CODE || 'T' + Math.random().toString(36).slice(2, 6)).
   await hp.waitForSelector('#wins li:has-text("Ana")');
   ok('host bingo calls list shows Ana');
   await p0.screenshot({ path: `${OUT}/03-phone-bingo.png` });
+  await sp.waitForSelector('#celebrate:not([hidden]) .who:has-text("Ana")');
+  await sp.waitForTimeout(900);
+  await sp.screenshot({ path: `${OUT}/11-screen-bingo.png` });
+  ok('big screen: full-screen “BINGO! Ana — 1st to finish” celebration');
+  await sp.waitForSelector('#celebrate', { state: 'hidden', timeout: 8000 });
+  await sp.waitForFunction(() => [...document.querySelectorAll('#wall img')].filter((i) => i.complete && i.naturalWidth > 0).length === 2);
+  assert((await sp.textContent('#wl')).includes('Ana'));
+  await sp.screenshot({ path: `${OUT}/12-screen-live.png` });
+  ok('big screen: winners list + photo wall with both photos');
+
+  console.log('▶ Host hides photos from the big screen');
+  await hp.uncheck('#wallProj');
+  await sp.waitForSelector('#liveV.nophotos');
+  const sImg = await sp.evaluate(() => { const f = document.querySelector('#wall img'); return f ? f.src : null; });
+  const ssrc = await sp.evaluate(() => location.hash);
+  const blocked = await sp.evaluate(([c, d]) => fetch(`/photo/${c}/x/0.jpg?d=${d}`).then((r) => r.status), [CODE, ssrc.slice(3)]);
+  assert.strictEqual(blocked, 403);
+  ok('photo wall hidden on the big screen, and its link can no longer load photos (403)');
+  void sImg;
+  await hp.check('#wallProj');
+  await sp.waitForFunction(() => !document.querySelector('#liveV').classList.contains('nophotos') && document.querySelectorAll('#wall img').length === 2);
+  ok('turned back on: photos return');
 
   console.log('▶ Photo wall + save card on the phone');
   await hp.waitForFunction(() => { const i = document.querySelector('#wall figure img'); return i && i.complete && i.naturalWidth > 0; });
   ok(`host photo wall: ${await hp.textContent('#wall figcaption')}`);
   await p0.click('#save');
-  await p0.waitForFunction(() => [...document.querySelectorAll('#saveList img')].filter((i) => i.complete && i.naturalWidth > 0).length === 2);
+  await p0.waitForFunction(() => [...document.querySelectorAll('#saveList img')].filter((i) => i.complete && i.naturalWidth > 0).length === 3);
   const dims = await p0.$eval('#saveList img', (i) => [i.naturalWidth, i.naturalHeight]);
-  ok(`save screen: whole-card picture (${dims.join('×')}) + 1 photo tile, press-and-hold to save`);
+  ok(`save screen: whole-card picture (${dims.join('×')}) + 2 photo tiles, press-and-hold to save`);
   await p0.screenshot({ path: `${OUT}/03b-phone-save.png` });
   await p0.click('#saveClose');
 
@@ -127,7 +183,7 @@ const CODE = (process.env.CODE || 'T' + Math.random().toString(36).slice(2, 6)).
   assert.deepStrictEqual(hostNames, ['Ben', 'Cara', 'Dee']);
   await hp.waitForFunction(() => { const i = document.querySelector('#cardGrid img.ph'); return i && i.complete && i.naturalWidth > 0; });
   ok('host sees Ana’s names and her photo');
-  await hp.click('#cardGrid .ph-cell');
+  await hp.click('#cardGrid .ph-cell >> nth=0');
   await hp.waitForSelector('.lightbox img');
   await hp.screenshot({ path: `${OUT}/04b-host-lightbox.png` });
   await hp.click('.lightbox');
@@ -143,8 +199,11 @@ const CODE = (process.env.CODE || 'T' + Math.random().toString(36).slice(2, 6)).
   const gone = await hp.evaluate((u) => fetch(u).then((r) => r.status), anaPhoto);
   assert.strictEqual(gone, 404);
   ok('photos deleted from the server when the game ended (404), wall cleared');
-  assert.strictEqual(await p0.$$eval('#grid .cell.has', (c) => c.length), 1);
-  ok('Ana still has her own photo on her phone');
+  assert.strictEqual(await p0.$$eval('#grid .cell.has', (c) => c.length), 2);
+  ok('Ana still has her own photos on her phone');
+  await sp.waitForSelector('#endV.on .podium .p1:has-text("Ana")');
+  await sp.screenshot({ path: `${OUT}/13-screen-ended.png` });
+  ok('big screen: “Game over!” with Ana on the #1 podium');
   await hp.screenshot({ path: `${OUT}/05-host-ended.png` });
   await P[2].screenshot({ path: `${OUT}/06-phone-ended.png` });
 
@@ -163,9 +222,7 @@ const CODE = (process.env.CODE || 'T' + Math.random().toString(36).slice(2, 6)).
   await pb.waitForSelector('#grid .cell');
   const order = [0, 1, 2, 3, 5, 6, 7, 8];
   for (const [n, i] of order.entries()) {
-    await pb.click(`#grid .cell[data-i="${i}"]`);
-    await pb.fill('#dn', 'Person ' + i);
-    await pb.click('#ds');
+    await tapFill(pb, i, 'Person ' + i, false);
     if (n === 2) {
       await pb.waitForTimeout(500);
       assert(await pb.$('#banner[hidden]'), 'a single line must not win in blackout mode');

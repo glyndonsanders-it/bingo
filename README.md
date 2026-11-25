@@ -12,12 +12,17 @@ Tested with **300 and 600 simulated players in one room** (see *Scale* below).
 - **How to win:** **1 line** (any row, column or diagonal) or **Blackout** (fill the whole card). It locks when the game starts.
 - **Room codes:** you get a random 5-character code (no look-alike characters such as 0/O or 1/I), or you can type your own (1–5 letters/numbers).
 - A live dashboard with the code, a QR code, the join link, player counts (joined/online), every player's progress, and the winners in the order the server received them. Tap any player to see their card **with their photos**, and tap a photo to enlarge it.
-- **Photo wall:** the newest photos stream in live, and you can choose whether they show on the projector.
+- **Photo wall:** the newest photos stream in live on the host page.
+- **Big screen** (**Open big screen** or **Copy big-screen link**): a separate full-screen page for the projector, with its own view-only link that can't control the game. It shows only audience-friendly content:
+  - **Before the start:** a giant room code and QR code, the join address, the "how to win" rule, the player count, and names popping in as people join.
+  - **During the game:** a full-screen **BINGO! / BLACKOUT!** celebration (with confetti) for every winner, the winners list, and the photo wall. The host can switch photos on or off for the big screen; when off, the big-screen link can't load photos at all. A small QR stays in the corner for latecomers.
+  - **After the game:** "Game over!" with a winners podium.
+  - Press **Full screen** (or the F key). The mouse cursor hides itself.
 - **Start / End / Resume.** Players who join before the start wait on a "get ready" screen. Late arrivals get a card immediately.
-- Squares stay editable in the lobby and lock when the game starts. You can remove players. **Show on projector** gives a big-screen view of the code, QR and winners. You can still print paper cards.
+- Squares stay editable in the lobby and lock when the game starts. You can remove players and still print paper cards.
 
 **Players** (`/join/CODE`, or type the code on the home page)
-- Same card and dialog as before: their name, a photo (camera or gallery), or both. Completed lines are highlighted, and Blackout is called when the whole card is full.
+- **Photo first, then the name:** tapping an empty square opens the phone's camera/photo picker straight away, then the name box appears (already focused) with the photo shown. If they close the picker, they can still just type a name. Tapping a filled square opens it for checking or editing.
 - Progress syncs to the server, so refreshing or losing signal doesn't lose the card. Changes made offline sync on reconnect.
 - **Photos are a temporary session.** While the game runs, a smaller copy of each photo is uploaded so the host can see it. **Only the host and the player who took it can open it.** When the host presses **End game**, every uploaded photo is **deleted from the server**. Players keep the full-size originals on their own phones. As a safety net, an hourly sweep also deletes photos from rooms that ended or are older than a day.
 - **Save card & photos:** creates one picture of the whole card (photos, names and the title) plus a captioned picture for each photo. Players press and hold a picture to save it, which works on Android and iPhone, or use **Share** / **Download**, or just take a screenshot.

@@ -310,6 +310,7 @@
     $('#gameHint').textContent = s.status === 'lobby'
       ? 'Players who join now wait on a “get ready” screen. Their cards appear the moment you start.'
       : s.status === 'live' ? 'Late arrivals can still join and get a card right away.' : 'The game is over. Players can still see their cards and the winners.';
+    $('#wallProj').checked = !!s.showPhotos;
     $('#sPlayers').textContent = s.playerCount;
     $('#sOnline').textContent = s.onlineCount;
     const bo = s.winMode === 'blackout';
@@ -370,16 +371,10 @@
   const copy = (txt, msg) => (navigator.clipboard ? navigator.clipboard.writeText(txt).then(() => toast(msg), () => prompt('Copy this:', txt)) : prompt('Copy this:', txt));
   $('#copyLink').addEventListener('click', () => copy(`${location.origin}/join/${code}`, 'Join link copied'));
   $('#copyHost').addEventListener('click', () => copy(`${location.origin}/host/${code}#k=${key}`, 'Host link copied — keep it private'));
-  $('#projBtn').addEventListener('click', () => setProj(true));
-  $('#projOff').addEventListener('click', () => setProj(false));
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.body.classList.contains('proj')) setProj(false); });
-  function setProj(on) {
-    document.body.classList.toggle('proj', on);
-    $('#projExit').hidden = !on;
-    $('#setPanel').classList.toggle('noproj', true);
-    if (on && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-    if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
-  }
+  // The big screen is its own page with a view-only key, so the projector never shows host controls.
+  const screenUrl = () => `${location.origin}/screen/${code}#d=${S && S.displayKey}`;
+  $('#projBtn').addEventListener('click', () => { if (S && S.displayKey) window.open(screenUrl(), `bingo-screen-${code}`); });
+  $('#copyScreen').addEventListener('click', () => S && S.displayKey && copy(screenUrl(), 'Big-screen link copied — open it on the projector computer'));
 
   // ── Player card viewer ──
   let cardPid = null;
@@ -426,7 +421,10 @@
     if (r.ok) { wall = r.photos; renderWall(); }
   }
   $('#wall').addEventListener('click', (e) => { const f = e.target.closest('[data-zoom]'); if (f) lightbox(f.dataset.zoom, f.dataset.cap); });
-  $('#wallProj').addEventListener('change', () => $('#wallPanel').classList.toggle('noproj', !$('#wallProj').checked));
+  $('#wallProj').addEventListener('change', async () => {
+    const r = await emit('host:showPhotos', { on: $('#wallProj').checked });
+    if (!r.ok) toast(r.error, true);
+  });
   // A modal <dialog>, so it stacks above the player-card dialog it may be opened from.
   function lightbox(url, cap) {
     const lb = document.createElement('dialog');

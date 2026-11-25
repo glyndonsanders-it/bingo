@@ -55,6 +55,7 @@
 #cardGrid{display:grid;gap:6px;margin:10px 0}
 #cardGrid .cell{cursor:default}
 #cardGrid .cam{position:absolute;right:4px;top:3px;font-size:.8rem}
+.bigscreen{display:grid;gap:4px;margin:14px 0 0;padding:12px;border-radius:12px;background:var(--soft)}
 .wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
 .wall figure{margin:0;position:relative;border-radius:10px;overflow:hidden;background:var(--soft);aspect-ratio:1;cursor:zoom-in}
 .wall img{width:100%;height:100%;object-fit:cover;display:block}
@@ -106,9 +107,15 @@ body.pr #sheet{display:block}
       <div class="row tight noproj" style="justify-content:center;margin:0">
         <button class="btn alt" id="copyLink">Copy join link</button>
         <button class="btn alt" id="copyHost">Copy host link</button>
-        <button class="btn" id="projBtn">Show on projector</button>
       </div>
-      <div class="row tight" style="justify-content:center;margin:10px 0 0" hidden id="projExit"><button class="btn alt" id="projOff">Exit projector view</button></div>
+      <div class="bigscreen">
+        <b>Big screen for the projector</b>
+        <span class="muted">A separate full-screen display with only the code, QR, names, winners and photos — no controls.</span>
+        <div class="row tight" style="justify-content:center;margin:8px 0 0">
+          <button class="btn" id="projBtn">Open big screen</button>
+          <button class="btn alt" id="copyScreen">Copy big-screen link</button>
+        </div>
+      </div>
     </section>
     <section class="panel">
       <div class="row" style="justify-content:space-between;margin:0 0 10px"><h2 style="margin:0">Game</h2><span class="pill" id="statusPill">Lobby</span></div>
@@ -130,7 +137,7 @@ body.pr #sheet{display:block}
       <ol class="wins" id="wins"></ol>
     </section>
     <section class="panel" id="wallPanel">
-      <div class="row" style="justify-content:space-between;margin:0 0 4px"><h2 style="margin:0">Photo wall</h2><label class="noproj"><input type="checkbox" id="wallProj" checked> Show on projector</label></div>
+      <div class="row" style="justify-content:space-between;margin:0 0 4px"><h2 style="margin:0">Photo wall</h2><label><input type="checkbox" id="wallProj" checked> Show photos on the big screen</label></div>
       <p id="wallP">Newest photos from players. They’re deleted from the server as soon as you end the game.</p>
       <div class="wall" id="wall"></div>
     </section>

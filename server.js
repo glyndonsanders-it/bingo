@@ -70,13 +70,18 @@ CREATE TABLE IF NOT EXISTS bingos (
 );
 CREATE INDEX IF NOT EXISTS bingos_room ON bingos(room_code);
 `);
-try { db.exec("ALTER TABLE rooms ADD COLUMN win_mode TEXT NOT NULL DEFAULT 'line'"); } catch (e) { /* already there */ }
+for (const col of ["win_mode TEXT NOT NULL DEFAULT 'line'", 'display_key TEXT', 'show_photos INTEGER NOT NULL DEFAULT 1']) {
+  try { db.exec(`ALTER TABLE rooms ADD COLUMN ${col}`); } catch (e) { /* already there */ }
+}
 
 const q = {
   room: db.prepare('SELECT * FROM rooms WHERE code = ?'),
   insertRoom: db.prepare('INSERT INTO rooms (code, host_key, title, size, free, prompts_json, win_mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
   updateSettings: db.prepare('UPDATE rooms SET title = ?, size = ?, free = ?, prompts_json = ?, win_mode = ? WHERE code = ?'),
   allRooms: db.prepare('SELECT code, status, created_at FROM rooms'),
+  setDisplayKey: db.prepare('UPDATE rooms SET display_key = ? WHERE code = ?'),
+  setShowPhotos: db.prepare('UPDATE rooms SET show_photos = ? WHERE code = ?'),
+  recentJoins: db.prepare('SELECT name, join_no FROM players WHERE room_code = ? AND kicked = 0 ORDER BY join_no DESC LIMIT ?'),
   setStatus: db.prepare('UPDATE rooms SET status = ?, started_at = COALESCE(started_at, ?), ended_at = ? WHERE code = ?'),
   players: db.prepare('SELECT * FROM players WHERE room_code = ? AND kicked = 0 ORDER BY join_no'),
   playerCount: db.prepare('SELECT COUNT(*) AS c FROM players WHERE room_code = ? AND kicked = 0'),
@@ -217,6 +222,21 @@ function roomView(r) {
     winners: winners(r.code, labels).filter((w) => w.kind === winKind(r)).slice(0, 50),
   };
 }
+// What the projector shows: no controls, no per-player details.
+function screenView(r) {
+  const players = q.players.all(r.code);
+  const labels = labelMap(players);
+  return {
+    code: r.code,
+    title: r.title,
+    status: r.status,
+    winMode: r.win_mode,
+    showPhotos: !!r.show_photos,
+    playerCount: players.length,
+    recent: players.slice(-18).reverse().map((p) => labels[p.id]),
+    winners: winners(r.code, labels).filter((w) => w.kind === winKind(r)).slice(0, 30).map((w) => ({ name: w.name, at: w.at })),
+  };
+}
 function hostView(r) {
   const players = q.players.all(r.code);
   const labels = labelMap(players);
@@ -229,6 +249,8 @@ function hostView(r) {
     size: r.size,
     free: !!r.free,
     winMode: r.win_mode,
+    displayKey: r.display_key,
+    showPhotos: !!r.show_photos,
     prompts: r.prompts,
     status: r.status,
     createdAt: r.created_at,
@@ -258,6 +280,7 @@ const page = (f) => (req, res) => { res.set('Cache-Control', 'no-cache'); res.se
 app.get('/', page('index.html'));
 app.get(['/host', '/host/:code'], page('host.html'));
 app.get(['/join', '/join/:code'], page('play.html'));
+app.get('/screen/:code', page('screen.html'));
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 
 const createLog = new Map(); // ip -> timestamps
@@ -275,6 +298,7 @@ app.post('/api/rooms', express.json({ limit: '64kb' }), (req, res) => {
   } else code = genCode();
   const key = rid(18);
   q.insertRoom.run(code, key, s.title, s.size, s.free ? 1 : 0, JSON.stringify(s.prompts), s.winMode, now());
+  q.setDisplayKey.run(rid(12), code);
   recent.push(now());
   createLog.set(ip, recent);
   log(code, `room created (${s.size}×${s.size}, ${s.prompts.length} squares)`);
@@ -325,7 +349,9 @@ app.post('/api/photo', express.raw({ type: () => true, limit: MAX_PHOTO_BYTES })
   const pr = progressOf(card, marksMap(p.id));
   progressCache.set(p.id, pr);
   const m = q.mark.get(p.id, cell);
-  io.to(`host:${r.code}`).emit('fx', { type: 'photo', playerId: p.id, cell, at: t, prompt: card[cell].t, with: m ? m.name : '', player: p.name });
+  const photoFx = { type: 'photo', playerId: p.id, cell, at: t, prompt: card[cell].t, with: m ? m.name : '', player: p.name };
+  io.to(`host:${r.code}`).emit('fx', photoFx);
+  if (r.show_photos) io.to(`screen:${r.code}`).emit('fx', photoFx);
   pushHost(r.code);
   res.json({ ok: true, v: t });
 });
@@ -335,6 +361,7 @@ app.get('/photo/:code/:pid/:cell.jpg', (req, res) => {
   if (!r) return res.sendStatus(404);
   let ok = false;
   if (req.query.k) ok = safeEq(r.host_key, req.query.k);
+  else if (req.query.d) ok = !!r.show_photos && !!r.display_key && safeEq(r.display_key, req.query.d);
   else if (req.query.t) {
     const p = q.playerByToken.get(String(req.query.t));
     ok = !!p && p.id === req.params.pid && p.room_code === r.code;
@@ -372,7 +399,10 @@ function pushRoom(code, delay = 1200) {
   roomTimers.set(code, setTimeout(() => {
     roomTimers.delete(code);
     const r = getRoom(code);
-    if (r) io.to(`room:${code}`).emit('room', roomView(r));
+    if (r) {
+      io.to(`room:${code}`).emit('room', roomView(r));
+      io.to(`screen:${code}`).emit('screen', screenView(r));
+    }
   }, delay));
 }
 function pushNow(code) {
@@ -382,6 +412,7 @@ function pushNow(code) {
   if (!r) return;
   io.to(`host:${code}`).emit('state', hostView(r));
   io.to(`room:${code}`).emit('room', roomView(r));
+  io.to(`screen:${code}`).emit('screen', screenView(r));
 }
 function log(code, msg) {
   console.log(`[${new Date().toISOString()}] [${code}] ${msg}`);
@@ -401,9 +432,35 @@ io.on('connection', (socket) => {
   socket.on('host:auth', ({ code, key } = {}, cb) => {
     const r = getRoom(code);
     if (!r || !safeEq(r.host_key, key)) return fail(cb, 'This host link is not valid for that room');
+    if (!r.display_key) { r.display_key = rid(12); q.setDisplayKey.run(r.display_key, r.code); }
     socket.data = { role: 'host', code: r.code };
     socket.join(`host:${r.code}`);
     ack(cb, { ok: true, state: hostView(r) });
+  });
+  socket.on('host:showPhotos', ({ on } = {}, cb) => {
+    const r = hostRoom(cb);
+    if (!r) return;
+    q.setShowPhotos.run(on ? 1 : 0, r.code);
+    pushNow(r.code);
+    ack(cb, { ok: true });
+  });
+
+  // ── Big screen (projector): view-only link ──
+  socket.on('screen:auth', ({ code, key } = {}, cb) => {
+    const r = getRoom(code);
+    if (!r || !r.display_key || !safeEq(r.display_key, key)) return fail(cb, 'This big-screen link is not valid');
+    socket.data = { role: 'screen', code: r.code };
+    socket.join(`screen:${r.code}`);
+    let photos = [];
+    if (r.show_photos && r.status === 'live') {
+      const players = Object.fromEntries(q.players.all(r.code).map((p) => [p.id, p]));
+      photos = q.recentPhotos.all(r.code, 24).filter((m) => players[m.player_id]).map((m) => {
+        const p = players[m.player_id];
+        const card = p.card_json ? JSON.parse(p.card_json) : [];
+        return { playerId: p.id, cell: m.cell, at: m.updated_at, prompt: card[m.cell] ? card[m.cell].t : '', with: m.name, player: p.name };
+      });
+    }
+    ack(cb, { ok: true, state: screenView(r), photos });
   });
   socket.on('host:update', (body = {}, cb) => {
     const r = hostRoom(cb);
@@ -434,7 +491,7 @@ io.on('connection', (socket) => {
       io.to(`p:${p.id}`).emit('me', meView(q.player.get(p.id)));
     }
     pushNow(r.code);
-    io.to(`room:${r.code}`).emit('fx', { type: 'start' });
+    io.to(`room:${r.code}`).to(`screen:${r.code}`).emit('fx', { type: 'start' });
     log(r.code, `game started with ${players.length} players`);
     ack(cb, { ok: true });
   });
@@ -446,7 +503,7 @@ io.on('connection', (socket) => {
     purgePhotos(r.code);
     log(r.code, 'game ended — uploaded photos deleted');
     pushNow(r.code);
-    io.to(`room:${r.code}`).emit('fx', { type: 'end' });
+    io.to(`room:${r.code}`).to(`screen:${r.code}`).emit('fx', { type: 'end' });
     ack(cb, { ok: true });
   });
   socket.on('host:resume', (_, cb) => {
@@ -568,7 +625,7 @@ io.on('connection', (socket) => {
     // Host hears every call; the whole room hears the first 20 (enough for the race, no pop-up storm at 300+ players);
     // the player always hears their own.
     for (const e of events) {
-      io.to(`host:${r.code}`).to(`p:${p.id}`).emit('fx', e);
+      io.to(`host:${r.code}`).to(`p:${p.id}`).to(`screen:${r.code}`).emit('fx', e); // the big screen celebrates every winner
       if (e.order <= 20) io.to(`room:${r.code}`).except(`p:${p.id}`).emit('fx', e);
     }
     if (events.some((e) => e.order <= 50)) pushRoom(r.code, 200); // phones show the top 50 winners
