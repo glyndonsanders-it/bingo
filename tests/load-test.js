@@ -12,7 +12,7 @@ const call = (s, ev, d) => new Promise((res) => { const t = Date.now(); s.timeou
 
 (async () => {
   const prompts = Array.from({ length: 40 }, (_, i) => `Square ${i + 1}`);
-  const room = await fetch(BASE + '/api/rooms', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Load test', size: 5, free: true, prompts, winMode: process.env.WIN_MODE || 'line' }) }).then((r) => r.json());
+  const room = await fetch(BASE + '/api/rooms', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Load test', size: 5, free: true, prompts, winMode: process.env.WIN_MODE || 'line', verify: process.env.VERIFY !== '0' }) }).then((r) => r.json());
   console.log(`room ${room.code} · ${N} players`);
   const host = io(BASE, { transports: ['websocket'] });
   let hostMsgs = 0, hostBytes = 0, last = null;
@@ -64,9 +64,14 @@ const call = (s, ev, d) => new Promise((res) => { const t = Date.now(); s.timeou
     }
   }));
   console.log(`marks: ${markMs.length} ok, ${markFail} failed in ${((Date.now() - tm) / 1000).toFixed(1)}s · ack p50 ${pct(markMs, 50)}ms p95 ${pct(markMs, 95)}ms p99 ${pct(markMs, 99)}ms max ${Math.max(...markMs)}ms`);
+  await sleep(1000);
+  const verMs = [];
+  const toCheck = last.winners.filter((w) => w.status === 'pending');
+  for (const w of toCheck) { const { ms, r } = await call(host, 'host:verify', { playerId: w.playerId, ok: true }); if (r.ok) verMs.push(ms); }
+  if (toCheck.length) console.log(`host checks: ${verMs.length}/${toCheck.length} cards confirmed · p95 ${pct(verMs, 95)}ms max ${Math.max(...verMs)}ms`);
   if (PHOTOS) console.log(`photos: ${upMs.length} uploaded, ${upFail} failed · p50 ${pct(upMs, 50)}ms p95 ${pct(upMs, 95)}ms max ${Math.max(...upMs)}ms`);
   await sleep(1500);
-  const winners = last.winners.length;
+  const winners = last.confirmed;
   console.log(`host view: ${last.playerCount} players, ${last.onlineCount} online, all cards full: ${last.players.every((p) => p.filled === 25)}, winners ${winners} (${last.winMode})`);
   const wall = await call(host, 'host:photos', { limit: 200 });
   const sample = wall.r.photos && wall.r.photos[0];

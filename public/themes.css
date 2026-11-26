@@ -1,0 +1,238 @@
+/* Party themes. html[data-party] is set by theme.js from the host's choice.
+   "General" is the base look in app.css; each theme below changes colors, fonts, shapes and layout. */
+@font-face{font-family:'Mountains of Christmas';font-weight:400;font-display:swap;src:url(/fonts/mountains-of-christmas/mountains-of-christmas-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:'Mountains of Christmas';font-weight:700;font-display:swap;src:url(/fonts/mountains-of-christmas/mountains-of-christmas-latin-700-normal.woff2) format('woff2')}
+@font-face{font-family:'Fredoka';font-weight:400;font-display:swap;src:url(/fonts/fredoka/fredoka-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:'Fredoka';font-weight:600;font-display:swap;src:url(/fonts/fredoka/fredoka-latin-600-normal.woff2) format('woff2')}
+@font-face{font-family:'Fredoka';font-weight:700;font-display:swap;src:url(/fonts/fredoka/fredoka-latin-700-normal.woff2) format('woff2')}
+@font-face{font-family:'Inter';font-weight:400;font-display:swap;src:url(/fonts/inter/inter-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:'Inter';font-weight:600;font-display:swap;src:url(/fonts/inter/inter-latin-600-normal.woff2) format('woff2')}
+@font-face{font-family:'Inter';font-weight:700;font-display:swap;src:url(/fonts/inter/inter-latin-700-normal.woff2) format('woff2')}
+@font-face{font-family:'Inter';font-weight:800;font-display:swap;src:url(/fonts/inter/inter-latin-800-normal.woff2) format('woff2')}
+@font-face{font-family:'Bungee';font-weight:400;font-display:swap;src:url(/fonts/bungee/bungee-latin-400-normal.woff2) format('woff2')}
+
+/* ── Decoration layer (snow, confetti, glow) ── */
+.deco{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+body>main,body>.view,body>#celebrate,body>#fsBtn{position:relative;z-index:1}
+body>.view{position:fixed}
+body>#celebrate,body>#fsBtn{position:fixed}
+.deco i{position:absolute;top:-6vh;font-style:normal;animation:deco-fall linear infinite}
+.deco .flake{color:#fff}
+@keyframes deco-fall{to{transform:translateY(112vh) rotate(300deg)}}
+.deco .blob{top:auto;width:60vmax;height:60vmax;border-radius:50%;filter:blur(90px);opacity:.35;animation:blob 18s ease-in-out infinite alternate}
+.deco .b1{background:#ff2e88;left:-20vmax;top:-20vmax}
+.deco .b2{background:#00e5ff;right:-25vmax;bottom:-25vmax;animation-delay:-6s}
+.deco .b3{background:#7c3aed;left:30vw;top:40vh;width:40vmax;height:40vmax;animation-delay:-12s}
+@keyframes blob{to{transform:translate(8vmax,-6vmax) scale(1.15)}}
+@media (prefers-reduced-motion:reduce){.deco i{animation:none!important}}
+
+/* ═════════ CHRISTMAS ═════════ */
+:root[data-party="christmas"]{--bg:#0f4d2f;--paper:#fffaf1;--soft:#f6efe2;--line:#e6d5b3;--ink:#2a160d;--hi:#f5c443;--band:#c8102e;--muted:#7b5e48;--navy:#2a160d;--on-bg:#fff8ea;--ok:#1f9d55;
+  --f-hand:'Mountains of Christmas',cursive;--f-display:'Bricolage Grotesque',system-ui,sans-serif}
+:root[data-party="christmas"] body{background:radial-gradient(rgba(255,255,255,.14) 1.2px,transparent 1.7px) 0 0/26px 26px,linear-gradient(180deg,#105634,#0a3520) fixed}
+:root[data-party="christmas"] .tag,:root[data-party="christmas"] .tagb{transform:none;border:3px solid var(--hi);overflow:visible;position:relative}
+:root[data-party="christmas"] .band{background:repeating-linear-gradient(-45deg,#c8102e 0 12px,#e2364f 12px 24px);border-radius:10px 10px 0 0}
+:root[data-party="christmas"] .tag::after,:root[data-party="christmas"] .tagb::after{content:'🎄';position:absolute;right:-.5em;top:-.7em;font-size:2.2em;filter:drop-shadow(0 3px 0 rgba(0,0,0,.25))}
+:root[data-party="christmas"] .tag .tv,:root[data-party="christmas"] .tag input[id]{font-weight:700}
+:root[data-party="christmas"] .cell{border-color:var(--line);border-radius:12px}
+:root[data-party="christmas"] .cell.got{background:#fff}
+:root[data-party="christmas"] .nm{background:var(--band);color:#fff;font-weight:700}
+:root[data-party="christmas"] .free{background:var(--band);color:#fff;border-color:var(--hi)}
+:root[data-party="christmas"] .win{border-color:var(--hi);box-shadow:inset 0 0 0 3px var(--hi),0 0 14px rgba(245,196,67,.6)}
+:root[data-party="christmas"] .btn.line{color:var(--on-bg);border-color:rgba(255,248,234,.7)}
+/* big screen: festive and centered */
+:root[data-party="christmas"] #lobbyV{grid-template-columns:1fr 1fr;grid-template-rows:auto auto auto auto 1fr;grid-template-areas:"tag tag" "qr code" "qr rule" "qr count" "names names";text-align:center;row-gap:2vmin}
+:root[data-party="christmas"] .a-tag{justify-self:center;width:min(92vw,110vmin)}
+:root[data-party="christmas"] .a-scan{display:none}
+:root[data-party="christmas"] .a-qr{width:44vmin;height:44vmin;position:relative;margin-top:5vmin;border:1vmin solid var(--band);outline:.6vmin solid var(--hi)}
+:root[data-party="christmas"] .a-qr::before{content:'🎁 Scan to join';position:absolute;top:-6.4vmin;left:50%;transform:translateX(-50%);background:var(--band);color:#fff;font:700 3vmin var(--f-body);padding:.6vmin 2.2vmin;border-radius:1vmin;white-space:nowrap}
+:root[data-party="christmas"] .a-code,:root[data-party="christmas"] .a-rule,:root[data-party="christmas"] .a-count{justify-self:center}
+:root[data-party="christmas"] .names{justify-content:center}
+:root[data-party="christmas"] .names span:nth-child(odd){background:var(--band);color:#fff}
+:root[data-party="christmas"] .names span:nth-child(3n){background:var(--hi);color:var(--ink)}
+:root[data-party="christmas"] #liveV{grid-template-areas:"rule rule tag tag join join" "wall wall wall wall win win"}
+:root[data-party="christmas"] #liveV.nophotos{grid-template-areas:"rule rule tag tag join join" "win win win win win win"}
+:root[data-party="christmas"] .panelb{background:rgba(255,255,255,.08);border:2px solid rgba(245,196,67,.5)}
+:root[data-party="christmas"] .wl li .o{background:var(--band);color:#fff}
+:root[data-party="christmas"] #celebrate{background:rgba(10,53,32,.93)}
+:root[data-party="christmas"] #celebrate .word{color:var(--hi);text-shadow:0 1.4vmin 0 var(--band)}
+:root[data-party="christmas"] #celebrate .who{font-weight:700}
+
+/* ═════════ FUN ACTIVITIES ═════════ */
+:root[data-party="fun"]{--bg:#ff6b3d;--paper:#fff;--soft:#fff1e8;--line:#ffd0b8;--ink:#2b1240;--hi:#ffe14d;--band:#7b2ff7;--muted:#7a5a86;--navy:#2b1240;--on-bg:#fff;
+  --f-body:'Fredoka',system-ui,sans-serif;--f-display:'Fredoka',system-ui,sans-serif;--f-hand:'Fredoka',system-ui,sans-serif}
+:root[data-party="fun"] body{background:linear-gradient(135deg,#ff7a3d,#ff3d8b 55%,#8a3dff) fixed}
+:root[data-party="fun"] .tag,:root[data-party="fun"] .tagb{transform:rotate(2deg);border-radius:28px;overflow:visible;position:relative;box-shadow:0 8px 0 rgba(43,18,64,.25)}
+:root[data-party="fun"] .band{border-radius:28px 28px 0 0}
+:root[data-party="fun"] .tag::after,:root[data-party="fun"] .tagb::after{content:'';position:absolute;left:12%;bottom:-18px;border:12px solid transparent;border-top:14px solid var(--paper);border-left:4px solid transparent}
+:root[data-party="fun"] .tag .tv,:root[data-party="fun"] .tag input[id]{font-weight:700;letter-spacing:-.01em}
+:root[data-party="fun"] #grid{gap:10px}
+:root[data-party="fun"] .cell{border-radius:20px;border-width:3px;font-family:var(--f-body)}
+:root[data-party="fun"] .cell:nth-child(5n+1){border-color:#ff6b3d}
+:root[data-party="fun"] .cell:nth-child(5n+2){border-color:#ffb800}
+:root[data-party="fun"] .cell:nth-child(5n+3){border-color:#22c55e}
+:root[data-party="fun"] .cell:nth-child(5n+4){border-color:#3b82f6}
+:root[data-party="fun"] .cell:nth-child(5n){border-color:#a855f7}
+:root[data-party="fun"] .cell:nth-child(odd){transform:rotate(-1.2deg)}
+:root[data-party="fun"] .cell:nth-child(even){transform:rotate(1.2deg)}
+:root[data-party="fun"] .nm{transform:rotate(-3deg);font-weight:700;font-size:1rem;border-radius:999px;text-align:center}
+:root[data-party="fun"] .free{background:var(--hi);color:var(--ink);border-color:var(--band)!important}
+:root[data-party="fun"] .win{border-color:var(--band)!important;box-shadow:inset 0 0 0 3px var(--band)}
+:root[data-party="fun"] .panel{border-radius:24px}
+:root[data-party="fun"] .btn{box-shadow:0 4px 0 rgba(43,18,64,.25)}
+/* big screen: QR on the right like a sticker, polaroid photos, winners on the right */
+:root[data-party="fun"] #lobbyV{grid-template-columns:1.15fr 1fr;grid-template-areas:"tag scan" "code qr" "rule qr" "count qr" "names names"}
+:root[data-party="fun"] .a-qr{transform:rotate(3deg);box-shadow:0 1.2vmin 0 rgba(43,18,64,.3)}
+:root[data-party="fun"] .names span{border-radius:999px;font-weight:700}
+:root[data-party="fun"] .names span:nth-child(4n+1){transform:rotate(-3deg);background:var(--hi)}
+:root[data-party="fun"] .names span:nth-child(4n+3){transform:rotate(3deg)}
+:root[data-party="fun"] #liveV{grid-template-areas:"tag tag rule rule join join" "wall wall wall wall win win"}
+:root[data-party="fun"] .panelb{border-radius:3vmin;background:rgba(255,255,255,.16)}
+:root[data-party="fun"] .wall figure{background:#fff;padding:.9vmin .9vmin 4.6vmin;border-radius:.6vmin;transform:rotate(-2deg);overflow:visible}
+:root[data-party="fun"] .wall figure:nth-child(even){transform:rotate(2deg)}
+:root[data-party="fun"] .wall figcaption{background:none;color:var(--ink);bottom:.4vmin;font-size:1.7vmin}
+:root[data-party="fun"] .wl li{border-radius:999px}
+:root[data-party="fun"] .wl li .o{border-radius:999px}
+:root[data-party="fun"] #celebrate{background:rgba(123,47,247,.9)}
+
+/* ═════════ TEAM BUILDING ═════════ */
+:root[data-party="team"]{--bg:#0f172a;--paper:#fff;--soft:#eef2f7;--line:#d5dde8;--ink:#0f172a;--hi:#2dd4bf;--band:#1d4ed8;--muted:#5b6577;--navy:#0f172a;--on-bg:#e8eef8;
+  --f-body:'Inter',system-ui,sans-serif;--f-display:'Inter',system-ui,sans-serif;--f-hand:'Inter',system-ui,sans-serif}
+:root[data-party="team"] body{background:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px) 0 0/40px 40px,linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px) 0 0/40px 40px,#0f172a fixed}
+:root[data-party="team"] .tag,:root[data-party="team"] .tagb{transform:none;max-width:none;border-radius:10px;display:grid;grid-template-columns:auto 1fr;box-shadow:none}
+:root[data-party="team"] .band{display:flex;align-items:center;padding:0 16px;font-size:.75rem;text-transform:uppercase;letter-spacing:.1em}
+:root[data-party="team"] .tag .tv,:root[data-party="team"] .tag input[id]{text-align:left;font:800 1.5rem/1.2 var(--f-display);padding:12px 16px}
+:root[data-party="team"] main .tag{margin:0 0 16px}
+:root[data-party="team"] #grid{gap:4px;counter-reset:sq}
+:root[data-party="team"] .cell{border-radius:6px;border-width:1px;font-family:var(--f-body);font-weight:600}
+:root[data-party="team"] .cell:not(.free)::before{counter-increment:sq;content:counter(sq);position:absolute;right:6px;bottom:4px;font-size:.62rem;color:var(--muted);font-weight:700}
+:root[data-party="team"] .cell.got:not(.free)::before{bottom:auto;top:4px}
+:root[data-party="team"] .nm{transform:none;background:#ccfbf1;color:var(--ink);font:700 .85rem/1.1 var(--f-body);border-radius:4px;left:4px;right:4px}
+:root[data-party="team"] .free{background:var(--band);color:#fff;border-color:var(--band)}
+:root[data-party="team"] .win{border-color:var(--hi);box-shadow:inset 0 0 0 2px var(--hi)}
+:root[data-party="team"] .panel{border-radius:10px}
+:root[data-party="team"] .btn{border-radius:8px}
+:root[data-party="team"] .banner{border-radius:8px}
+:root[data-party="team"] .btn.line{color:var(--on-bg);border-color:rgba(232,238,248,.5)}
+/* big screen: dashboard with a header bar and side stats */
+:root[data-party="team"] #lobbyV{grid-template-columns:1fr 1.2fr .8fr;grid-template-rows:auto auto auto 1fr;grid-template-areas:"tag tag tag" "qr code count" "qr rule count" "qr names names";align-content:start}
+:root[data-party="team"] .a-scan{display:none}
+:root[data-party="team"] .tagb .tt{text-align:left;font-weight:800}
+:root[data-party="team"] .a-tag .tt{font-size:6vmin}
+:root[data-party="team"] .a-tag .band{font-size:2vmin}
+:root[data-party="team"] .a-qr{width:46vmin;height:46vmin;border-radius:1vmin}
+:root[data-party="team"] .a-count{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:1.2vmin;padding:3vmin;display:grid;align-content:center;justify-items:center;text-align:center}
+:root[data-party="team"] .names span{border-radius:.6vmin;font-size:2.6vmin;font-weight:600}
+:root[data-party="team"] .code{letter-spacing:.08em;color:var(--hi);text-shadow:none}
+:root[data-party="team"] .rule{border-radius:.8vmin}
+:root[data-party="team"] #liveV{grid-template-rows:auto auto 1fr;grid-template-areas:"tag tag tag tag tag tag" "join win win wall wall wall" "rule win win wall wall wall"}
+:root[data-party="team"] #liveV.nophotos{grid-template-areas:"tag tag tag tag tag tag" "join win win win win win" "rule win win win win win"}
+:root[data-party="team"] .l-join{flex-direction:column;justify-self:stretch;text-align:center;border-radius:1.2vmin;background:rgba(255,255,255,.07)}
+:root[data-party="team"] .l-join .code{font-size:5vmin}
+:root[data-party="team"] .l-rule{background:rgba(255,255,255,.07);border-radius:1.2vmin;padding:2vmin;align-content:start}
+:root[data-party="team"] .l-rule .rule{font-size:2.4vmin}
+:root[data-party="team"] .panelb{border-radius:1.2vmin;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15)}
+:root[data-party="team"] .wl li{border-radius:.6vmin;font-size:3vmin}
+:root[data-party="team"] .wall figure{border-radius:.6vmin}
+:root[data-party="team"] #celebrate{background:rgba(15,23,42,.95)}
+:root[data-party="team"] #celebrate .word{color:var(--hi);text-shadow:none}
+:root[data-party="team"] .podium div{border-radius:1vmin 1vmin 0 0}
+
+/* ═════════ YOUTHFUL ═════════ */
+:root[data-party="youth"]{--bg:#0b0820;--paper:#17122e;--soft:#241c45;--line:#3d2f73;--ink:#f4f1ff;--hi:#c6ff00;--band:#ff2e88;--muted:#a9a2d6;--navy:#0b0820;--on-bg:#fff;--ok:#c6ff00;
+  --f-body:'Fredoka',system-ui,sans-serif;--f-display:'Bungee',system-ui,sans-serif;--f-hand:'Fredoka',system-ui,sans-serif}
+:root[data-party="youth"] body{background:#0b0820}
+:root[data-party="youth"] .tag,:root[data-party="youth"] .tagb{transform:rotate(-3deg) skew(-2deg);border:3px solid var(--hi);box-shadow:0 0 24px rgba(198,255,0,.35),7px 7px 0 var(--band)}
+:root[data-party="youth"] .band{font-family:var(--f-display);font-weight:400;letter-spacing:.04em}
+:root[data-party="youth"] .tag .tv,:root[data-party="youth"] .tag input[id]{font:400 clamp(1.4rem,6.5vw,2.2rem)/1.15 var(--f-display);color:var(--hi)}
+:root[data-party="youth"] .cell{background:var(--paper);color:var(--ink);border-color:var(--line);border-radius:14px}
+:root[data-party="youth"] .cell.got{border-color:var(--hi);box-shadow:0 0 10px rgba(198,255,0,.35)}
+:root[data-party="youth"] .nm{background:var(--hi);color:var(--navy);font-weight:700;transform:rotate(-4deg)}
+:root[data-party="youth"] .free{background:var(--band);color:#fff;border-color:var(--band);font-family:var(--f-display);font-weight:400}
+:root[data-party="youth"] .win{border-color:var(--band)!important;box-shadow:0 0 0 3px var(--band),0 0 18px var(--band)}
+:root[data-party="youth"] .panel{border:2px solid var(--line)}
+:root[data-party="youth"] .btn.alt{background:var(--soft);color:var(--ink);border-color:var(--line)}
+:root[data-party="youth"] .banner{background:var(--hi);color:var(--navy);transform:rotate(-1deg)}
+:root[data-party="youth"] #status.bingo{color:var(--hi);text-shadow:0 0 14px rgba(198,255,0,.6)}
+/* big screen: sticker collage — giant code, tilted QR */
+:root[data-party="youth"] #lobbyV{grid-template-columns:1fr 1fr .95fr;grid-template-rows:auto auto auto 1fr;grid-template-areas:"code code qr" "tag tag qr" "rule count qr" "names names names";align-content:center}
+:root[data-party="youth"] .a-scan{display:none}
+:root[data-party="youth"] .a-qr{width:48vmin;height:48vmin;transform:rotate(5deg);border:1vmin solid var(--hi);box-shadow:1.6vmin 1.6vmin 0 var(--band)}
+:root[data-party="youth"] .code{font-family:var(--f-display);font-weight:400;color:var(--hi);text-shadow:.6vmin .6vmin 0 var(--band)}
+:root[data-party="youth"] .a-code .code{font-size:17vmin;text-shadow:1vmin 1vmin 0 var(--band)}
+:root[data-party="youth"] .l-join .code{font-size:5.5vmin}
+:root[data-party="youth"] .a-tag .tt{font-family:var(--f-display);font-weight:400;font-size:6vmin}
+:root[data-party="youth"] .rule{transform:rotate(-2deg);color:var(--navy)}
+:root[data-party="youth"] .names span{font-weight:700;border:2px solid var(--hi);background:var(--paper);color:var(--ink)}
+:root[data-party="youth"] .names span:nth-child(odd){transform:rotate(-3deg);border-color:var(--band)}
+:root[data-party="youth"] .big-n{font-family:var(--f-display);font-weight:400;color:var(--band)}
+:root[data-party="youth"] .panelb{background:rgba(23,18,46,.75);border:2px solid var(--line)}
+:root[data-party="youth"] .wl li{border:2px solid var(--hi)}
+:root[data-party="youth"] .wl li:nth-child(odd){transform:rotate(-1deg)}
+:root[data-party="youth"] .wl li:nth-child(even){transform:rotate(1deg)}
+:root[data-party="youth"] .wall figure{border:.5vmin solid var(--hi)}
+:root[data-party="youth"] .wall figure:nth-child(odd){transform:rotate(-2deg)}
+:root[data-party="youth"] .wall figure:nth-child(even){transform:rotate(2deg);border-color:var(--band)}
+:root[data-party="youth"] #celebrate{background:rgba(11,8,32,.92)}
+:root[data-party="youth"] #celebrate .word{font-family:var(--f-display);font-weight:400;color:var(--hi);text-shadow:1.2vmin 1.2vmin 0 var(--band)}
+:root[data-party="youth"] #endV h1{font-family:var(--f-display);font-weight:400;color:var(--hi);text-shadow:1vmin 1vmin 0 var(--band)}
+
+/* ═════════ MINIMAL ═════════ */
+:root[data-party="minimal"]{--bg:#f6f5f2;--paper:#fff;--soft:#f0efeb;--line:#dcdad3;--ink:#111;--hi:#111;--band:#111;--muted:#6b6a66;--navy:#fff;--on-bg:#111;--ok:#111;
+  --f-body:'Inter',system-ui,sans-serif;--f-display:'Inter',system-ui,sans-serif;--f-hand:'Inter',system-ui,sans-serif}
+:root[data-party="minimal"] body{background:#f6f5f2}
+:root[data-party="minimal"] .tag,:root[data-party="minimal"] .tagb{transform:none;background:none;box-shadow:none;border:0;max-width:none;text-align:center}
+:root[data-party="minimal"] .band{background:none;color:var(--muted);text-transform:uppercase;letter-spacing:.22em;font-weight:600;font-size:.72rem;padding:4px}
+:root[data-party="minimal"] .tag .tv,:root[data-party="minimal"] .tag input[id]{font:700 clamp(1.6rem,7vw,2.4rem)/1.15 var(--f-display);color:var(--ink);letter-spacing:-.02em}
+:root[data-party="minimal"] #grid{gap:1px;background:var(--line);border:1px solid var(--line)}
+:root[data-party="minimal"] .cell{border:0;border-radius:0;font-family:var(--f-body);font-weight:600}
+:root[data-party="minimal"] .cell.got{background:#fafaf8}
+:root[data-party="minimal"] .nm{transform:none;left:0;right:0;bottom:0;border-radius:0;font:600 .78rem/1.2 var(--f-body);padding:4px 6px}
+:root[data-party="minimal"] .free{background:#111;color:#fff;border:0}
+:root[data-party="minimal"] .win{box-shadow:inset 0 0 0 2px #111}
+:root[data-party="minimal"] .panel{border:1px solid var(--line);border-radius:6px}
+:root[data-party="minimal"] .btn{border-radius:6px}
+:root[data-party="minimal"] .btn.line{color:#111;border-color:#111}
+:root[data-party="minimal"] .btn.alt{background:#fff}
+:root[data-party="minimal"] .banner{border-radius:4px}
+:root[data-party="minimal"] #status.bingo{color:#111}
+:root[data-party="minimal"] .toast{box-shadow:none;border-radius:6px}
+/* big screen: whitespace, two quiet columns, no decoration */
+:root[data-party="minimal"] #lobbyV{grid-template-columns:1fr 1fr;grid-template-rows:auto auto auto 1fr;grid-template-areas:"tag tag" "code qr" "rule qr" "count qr";align-content:center;row-gap:3vmin;padding:8vmin}
+:root[data-party="minimal"] .a-scan,:root[data-party="minimal"] .a-names{display:none}
+:root[data-party="minimal"] .a-tag .tt{font-size:7vmin;font-weight:700}
+:root[data-party="minimal"] .a-qr{width:40vmin;height:40vmin;border:1px solid var(--line);box-shadow:none;border-radius:0}
+:root[data-party="minimal"] .code{color:#111;text-shadow:none;font-weight:700;letter-spacing:.2em}
+:root[data-party="minimal"] .rule{background:none;border:1px solid #111;color:#111;border-radius:0;font-weight:600}
+:root[data-party="minimal"] .big-n{font-weight:700}
+:root[data-party="minimal"] #liveV{grid-template-areas:"tag tag tag tag join join" "win win win wall wall wall";padding:5vmin}
+:root[data-party="minimal"] .l-rule{display:none}
+:root[data-party="minimal"] .l-join{background:none;border:1px solid var(--line);border-radius:0}
+:root[data-party="minimal"] .l-join .qrbox,:root[data-party="minimal"] .qrbox{box-shadow:none;border-radius:0}
+:root[data-party="minimal"] .panelb{background:#fff;border:1px solid var(--line);border-radius:0}
+:root[data-party="minimal"] .wl li{border-bottom:1px solid var(--line);border-radius:0;background:none}
+:root[data-party="minimal"] .wl li .o{background:#111;color:#fff;border-radius:0}
+:root[data-party="minimal"] .wall figure{border-radius:0}
+:root[data-party="minimal"] #celebrate{background:rgba(246,245,242,.97)}
+:root[data-party="minimal"] #celebrate .word{color:#111;text-shadow:none;font-weight:800}
+:root[data-party="minimal"] #celebrate .who,:root[data-party="minimal"] #celebrate .place{color:#111}
+:root[data-party="minimal"] #celebrate .conf{display:none}
+:root[data-party="minimal"] #endV h1{color:#111;text-shadow:none}
+:root[data-party="minimal"] .podium div{border:1px solid var(--line);border-radius:0}
+:root[data-party="minimal"] .podium .p1{background:#111;color:#fff}
+:root[data-party="minimal"] .rest span{background:none;border:1px solid var(--line)}
+:root[data-party="minimal"] .checking,:root[data-party="minimal"] .ping{background:#111;color:#fff;box-shadow:none}
+
+/* ── Host: theme picker ── */
+.themes{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:0 0 14px}
+.theme-opt{font:inherit;text-align:left;border:2px solid var(--line);border-radius:12px;padding:0;overflow:hidden;cursor:pointer;background:var(--paper);color:var(--ink)}
+.theme-opt[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 3px var(--hi)}
+.theme-opt .sw{display:flex;align-items:center;justify-content:center;height:54px;font-size:1.6rem}
+.theme-opt .tx{display:block;padding:6px 10px 8px;font-weight:700;font-size:.9rem;line-height:1.25}
+.theme-opt .tx small{display:block;font-weight:500;color:var(--muted);font-size:.75rem}
+.sw-general{background:#2f4bff}
+.sw-christmas{background:radial-gradient(rgba(255,255,255,.4) 1px,transparent 1.5px) 0 0/10px 10px,linear-gradient(#105634,#0a3520)}
+.sw-fun{background:linear-gradient(135deg,#ff7a3d,#ff3d8b 55%,#8a3dff)}
+.sw-team{background:#0f172a;box-shadow:inset 0 -6px 0 #2dd4bf}
+.sw-youth{background:radial-gradient(circle at 30% 30%,#ff2e88,transparent 60%),radial-gradient(circle at 75% 70%,#00e5ff,transparent 55%),#0b0820}
+.sw-minimal{background:#f6f5f2;box-shadow:inset 0 0 0 1px #dcdad3}

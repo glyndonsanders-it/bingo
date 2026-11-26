@@ -70,14 +70,20 @@ CREATE TABLE IF NOT EXISTS bingos (
 );
 CREATE INDEX IF NOT EXISTS bingos_room ON bingos(room_code);
 `);
-for (const col of ["win_mode TEXT NOT NULL DEFAULT 'line'", 'display_key TEXT', 'show_photos INTEGER NOT NULL DEFAULT 1']) {
+for (const col of ["win_mode TEXT NOT NULL DEFAULT 'line'", 'display_key TEXT', 'show_photos INTEGER NOT NULL DEFAULT 1', 'verify INTEGER NOT NULL DEFAULT 1', 'stop_after INTEGER NOT NULL DEFAULT 0', "theme TEXT NOT NULL DEFAULT 'general'"]) {
   try { db.exec(`ALTER TABLE rooms ADD COLUMN ${col}`); } catch (e) { /* already there */ }
+}
+// A claim is 'pending' until the host checks the card, then 'verified' (rejected claims are deleted so the player can try again).
+for (const col of ["status TEXT NOT NULL DEFAULT 'verified'", 'reviewed_at INTEGER']) {
+  try { db.exec(`ALTER TABLE bingos ADD COLUMN ${col}`); } catch (e) { /* already there */ }
 }
 
 const q = {
   room: db.prepare('SELECT * FROM rooms WHERE code = ?'),
-  insertRoom: db.prepare('INSERT INTO rooms (code, host_key, title, size, free, prompts_json, win_mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
-  updateSettings: db.prepare('UPDATE rooms SET title = ?, size = ?, free = ?, prompts_json = ?, win_mode = ? WHERE code = ?'),
+  insertRoom: db.prepare('INSERT INTO rooms (code, host_key, title, size, free, prompts_json, win_mode, verify, stop_after, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'),
+  updateSettings: db.prepare('UPDATE rooms SET title = ?, size = ?, free = ?, prompts_json = ?, win_mode = ?, verify = ?, stop_after = ? WHERE code = ?'),
+  setStopAfter: db.prepare('UPDATE rooms SET stop_after = ? WHERE code = ?'),
+  setTheme: db.prepare('UPDATE rooms SET theme = ? WHERE code = ?'),
   allRooms: db.prepare('SELECT code, status, created_at FROM rooms'),
   setDisplayKey: db.prepare('UPDATE rooms SET display_key = ? WHERE code = ?'),
   setShowPhotos: db.prepare('UPDATE rooms SET show_photos = ? WHERE code = ?'),
@@ -103,7 +109,10 @@ const q = {
   dropRoomPhotoFlags: db.prepare('UPDATE marks SET photo = 0 WHERE photo = 1 AND player_id IN (SELECT id FROM players WHERE room_code = ?)'),
   recentPhotos: db.prepare('SELECT m.player_id, m.cell, m.name, m.updated_at FROM marks m JOIN players p ON p.id = m.player_id WHERE p.room_code = ? AND p.kicked = 0 AND m.photo = 1 ORDER BY m.updated_at DESC LIMIT ?'),
   bingos: db.prepare('SELECT b.*, p.name, p.join_no FROM bingos b JOIN players p ON p.id = b.player_id WHERE b.room_code = ? ORDER BY b.id'),
-  insertBingo: db.prepare('INSERT OR IGNORE INTO bingos (room_code, player_id, kind, at) VALUES (?, ?, ?, ?)'),
+  insertBingo: db.prepare('INSERT OR IGNORE INTO bingos (room_code, player_id, kind, at, status) VALUES (?, ?, ?, ?, ?)'),
+  claimOf: db.prepare('SELECT * FROM bingos WHERE player_id = ? AND kind = ?'),
+  setClaimStatus: db.prepare('UPDATE bingos SET status = ?, reviewed_at = ? WHERE id = ?'),
+  deleteClaim: db.prepare('DELETE FROM bingos WHERE id = ?'),
   countBingo: db.prepare('SELECT COUNT(*) AS c FROM bingos WHERE room_code = ? AND kind = ?'),
 };
 
@@ -145,8 +154,14 @@ function validateSettings(b) {
   const need = cellsNeeded(size, free);
   if (prompts.length < need) return { error: `Add at least ${need} different squares for a ${size} × ${size} card` };
   const winMode = b.winMode === 'blackout' ? 'blackout' : 'line';
-  return { title, size, free, prompts, winMode };
+  const verify = b.verify !== false;
+  const stopAfter = clampStop(b.stopAfter);
+  return { title, size, free, prompts, winMode, verify, stopAfter, theme: cleanTheme(b.theme) };
 }
+
+const clampStop = (n) => Math.max(0, Math.min(100, Math.floor(Number(n) || 0)));
+const THEMES = ['general', 'christmas', 'fun', 'team', 'youth', 'minimal'];
+const cleanTheme = (t) => (THEMES.includes(t) ? t : 'general');
 
 function shuffle(a) {
   for (let i = a.length - 1; i > 0; i--) {
@@ -205,7 +220,13 @@ function labelMap(players) {
   return m;
 }
 function winners(code, labels) {
-  return q.bingos.all(code).map((b) => ({ kind: b.kind, name: (labels && labels[b.player_id]) || b.name, playerId: b.player_id, at: b.at }));
+  return q.bingos.all(code).map((b) => ({ kind: b.kind, name: (labels && labels[b.player_id]) || b.name, playerId: b.player_id, at: b.at, status: b.status }));
+}
+// Claims for this room's win mode, in the order the server received them.
+// Confirmed winners are placed by that order (finishing first wins), whenever the host gets to check them.
+function standings(r, labels) {
+  let place = 0;
+  return winners(r.code, labels).filter((w) => w.kind === winKind(r)).map((w) => ({ ...w, place: w.status === 'verified' ? ++place : 0 }));
 }
 
 function roomView(r) {
@@ -217,9 +238,12 @@ function roomView(r) {
     size: r.size,
     free: !!r.free,
     winMode: r.win_mode,
+    theme: r.theme,
+    verify: !!r.verify,
+    stopAfter: r.stop_after,
     status: r.status,
     playerCount: players.length,
-    winners: winners(r.code, labels).filter((w) => w.kind === winKind(r)).slice(0, 50),
+    winners: standings(r, labels).filter((w) => w.place).slice(0, 50),
   };
 }
 // What the projector shows: no controls, no per-player details.
@@ -231,24 +255,32 @@ function screenView(r) {
     title: r.title,
     status: r.status,
     winMode: r.win_mode,
+    theme: r.theme,
     showPhotos: !!r.show_photos,
     playerCount: players.length,
     recent: players.slice(-18).reverse().map((p) => labels[p.id]),
-    winners: winners(r.code, labels).filter((w) => w.kind === winKind(r)).slice(0, 30).map((w) => ({ name: w.name, at: w.at })),
+    stopAfter: r.stop_after,
+    winners: standings(r, labels).filter((w) => w.place).slice(0, 30).map((w) => ({ name: w.name, at: w.at, place: w.place })),
+    checking: standings(r, labels).filter((w) => w.status === 'pending').slice(0, 8).map((w) => w.name),
   };
 }
 function hostView(r) {
   const players = q.players.all(r.code);
   const labels = labelMap(players);
-  const win = winners(r.code, labels).filter((w) => w.kind === winKind(r));
+  const win = standings(r, labels);
   const rank = {};
-  win.forEach((w, i) => { rank[w.playerId] = i + 1; });
+  const pending = {};
+  win.forEach((w) => { if (w.place) rank[w.playerId] = w.place; if (w.status === 'pending') pending[w.playerId] = true; });
   return {
     code: r.code,
     title: r.title,
     size: r.size,
     free: !!r.free,
     winMode: r.win_mode,
+    theme: r.theme,
+    verify: !!r.verify,
+    stopAfter: r.stop_after,
+    confirmed: win.filter((w) => w.place).length,
     displayKey: r.display_key,
     showPhotos: !!r.show_photos,
     prompts: r.prompts,
@@ -256,13 +288,19 @@ function hostView(r) {
     createdAt: r.created_at,
     playerCount: players.length,
     onlineCount: players.filter((p) => online.get(p.id)).length,
-    players: players.map((p) => ({ id: p.id, name: labels[p.id], joinNo: p.join_no, online: !!online.get(p.id), ...progressFor(p), rank: rank[p.id] || 0 })),
+    players: players.map((p) => ({ id: p.id, name: labels[p.id], joinNo: p.join_no, online: !!online.get(p.id), ...progressFor(p), rank: rank[p.id] || 0, pending: !!pending[p.id] })),
     winners: win,
   };
 }
 const winKind = (r) => (r.win_mode === 'blackout' ? 'blackout' : 'bingo');
 function meView(p) {
-  return { id: p.id, name: p.name, card: p.card_json ? JSON.parse(p.card_json) : null, marks: marksMap(p.id) };
+  const r = getRoom(p.room_code);
+  let claim = null;
+  if (r) {
+    const mine = standings(r).find((w) => w.playerId === p.id);
+    if (mine) claim = { status: mine.status, place: mine.place };
+  }
+  return { id: p.id, name: p.name, card: p.card_json ? JSON.parse(p.card_json) : null, marks: marksMap(p.id), claim };
 }
 
 // ───────────────────────── HTTP ─────────────────────────
@@ -275,6 +313,9 @@ const pub = path.join(__dirname, 'public');
 
 app.use('/fonts/bricolage', express.static(path.join(__dirname, 'node_modules/@fontsource/bricolage-grotesque/files'), { maxAge: '30d', immutable: true }));
 app.use('/fonts/caveat', express.static(path.join(__dirname, 'node_modules/@fontsource/caveat/files'), { maxAge: '30d', immutable: true }));
+for (const f of ['mountains-of-christmas', 'fredoka', 'inter', 'bungee']) {
+  app.use(`/fonts/${f}`, express.static(path.join(__dirname, `node_modules/@fontsource/${f}/files`), { maxAge: '30d', immutable: true }));
+}
 app.use(express.static(pub, { index: false, maxAge: '5m' }));
 const page = (f) => (req, res) => { res.set('Cache-Control', 'no-cache'); res.sendFile(path.join(pub, f)); };
 app.get('/', page('index.html'));
@@ -297,8 +338,9 @@ app.post('/api/rooms', express.json({ limit: '64kb' }), (req, res) => {
     if (q.room.get(code)) return res.status(409).json({ error: `Room code ${code} is already taken — try another` });
   } else code = genCode();
   const key = rid(18);
-  q.insertRoom.run(code, key, s.title, s.size, s.free ? 1 : 0, JSON.stringify(s.prompts), s.winMode, now());
+  q.insertRoom.run(code, key, s.title, s.size, s.free ? 1 : 0, JSON.stringify(s.prompts), s.winMode, s.verify ? 1 : 0, s.stopAfter, now());
   q.setDisplayKey.run(rid(12), code);
+  q.setTheme.run(s.theme, code);
   recent.push(now());
   createLog.set(ip, recent);
   log(code, `room created (${s.size}×${s.size}, ${s.prompts.length} squares)`);
@@ -308,7 +350,7 @@ app.post('/api/rooms', express.json({ limit: '64kb' }), (req, res) => {
 app.get('/api/rooms/:code', (req, res) => {
   const r = getRoom(req.params.code);
   if (!r) return res.status(404).json({ error: 'No room with that code' });
-  res.json({ code: r.code, title: r.title, status: r.status });
+  res.json({ code: r.code, title: r.title, status: r.status, theme: r.theme });
 });
 
 // ── Temporary photo session ──
@@ -418,6 +460,35 @@ function log(code, msg) {
   console.log(`[${new Date().toISOString()}] [${code}] ${msg}`);
 }
 
+function endGame(r, reason) {
+  q.setStatus.run('ended', now(), now(), r.code);
+  purgePhotos(r.code);
+  log(r.code, `game ended (${reason}) — uploaded photos deleted`);
+  pushNow(r.code);
+  const confirmed = standings(getRoom(r.code)).filter((w) => w.place).length;
+  io.to(`room:${r.code}`).to(`screen:${r.code}`).to(`host:${r.code}`).emit('fx', { type: 'end', reason, winners: confirmed });
+}
+// Auto-stop once the first N valid finishers are all confirmed (a still-unchecked earlier claim holds it open).
+function checkAutoStop(code) {
+  const r = getRoom(code);
+  if (!r || r.status !== 'live' || !r.stop_after) return;
+  let confirmed = 0;
+  for (const w of standings(r)) {
+    if (w.status === 'pending') return;
+    if (w.place && ++confirmed >= r.stop_after) return endGame(r, 'auto');
+  }
+}
+// A confirmed winner: big celebration on the screen, the player's own "you're #n", and the first 20 for everyone.
+function announceWinner(r, playerId) {
+  const labels = labelMap(q.players.all(r.code));
+  const w = standings(r, labels).find((x) => x.playerId === playerId);
+  if (!w || !w.place) return;
+  const fx = { type: 'winner', kind: w.kind, name: w.name, place: w.place, playerId };
+  io.to(`host:${r.code}`).to(`p:${playerId}`).to(`screen:${r.code}`).emit('fx', fx);
+  if (w.place <= 20) io.to(`room:${r.code}`).except(`p:${playerId}`).emit('fx', fx);
+  log(r.code, `WINNER #${w.place}: ${w.name}`);
+}
+
 io.on('connection', (socket) => {
   const ack = (cb, v) => typeof cb === 'function' && cb(v);
   const fail = (cb, error) => ack(cb, { ok: false, error });
@@ -468,7 +539,7 @@ io.on('connection', (socket) => {
     if (r.status !== 'lobby') return fail(cb, 'Squares are locked once the game starts');
     const s = validateSettings(body);
     if (s.error) return fail(cb, s.error);
-    q.updateSettings.run(s.title, s.size, s.free ? 1 : 0, JSON.stringify(s.prompts), s.winMode, r.code);
+    q.updateSettings.run(s.title, s.size, s.free ? 1 : 0, JSON.stringify(s.prompts), s.winMode, s.verify ? 1 : 0, s.stopAfter, r.code);
     pushNow(r.code);
     ack(cb, { ok: true });
   });
@@ -499,11 +570,7 @@ io.on('connection', (socket) => {
     const r = hostRoom(cb);
     if (!r) return;
     if (r.status !== 'live') return fail(cb, 'The game is not running');
-    q.setStatus.run('ended', now(), now(), r.code);
-    purgePhotos(r.code);
-    log(r.code, 'game ended — uploaded photos deleted');
-    pushNow(r.code);
-    io.to(`room:${r.code}`).to(`screen:${r.code}`).emit('fx', { type: 'end' });
+    endGame(r, 'host');
     ack(cb, { ok: true });
   });
   socket.on('host:resume', (_, cb) => {
@@ -514,6 +581,43 @@ io.on('connection', (socket) => {
     pushNow(r.code);
     io.to(`room:${r.code}`).emit('fx', { type: 'resume' });
     ack(cb, { ok: true });
+  });
+  socket.on('host:verify', ({ playerId, ok } = {}, cb) => {
+    const r = hostRoom(cb);
+    if (!r) return;
+    const c = q.claimOf.get(String(playerId), winKind(r));
+    if (!c || c.room_code !== r.code) return fail(cb, 'That player has no bingo to check');
+    if (c.status !== 'pending') return fail(cb, 'Already confirmed');
+    if (ok) {
+      q.setClaimStatus.run('verified', now(), c.id);
+      announceWinner(r, c.player_id);
+    } else {
+      q.deleteClaim.run(c.id);
+      io.to(`p:${c.player_id}`).emit('fx', { type: 'rejected' });
+      log(r.code, `claim rejected for player ${c.player_id}`);
+    }
+    const p = q.player.get(c.player_id);
+    if (p) io.to(`p:${p.id}`).emit('me', meView(p));
+    pushHost(r.code, 0);
+    pushRoom(r.code, 300); // batched for phones and the big screen
+    ack(cb, { ok: true });
+    checkAutoStop(r.code);
+  });
+  // The theme is only decoration, so it can change at any time — every phone and the big screen restyle live.
+  socket.on('host:setTheme', ({ theme } = {}, cb) => {
+    const r = hostRoom(cb);
+    if (!r) return;
+    q.setTheme.run(cleanTheme(theme), r.code);
+    pushNow(r.code);
+    ack(cb, { ok: true });
+  });
+  socket.on('host:setStopAfter', ({ n } = {}, cb) => {
+    const r = hostRoom(cb);
+    if (!r) return;
+    q.setStopAfter.run(clampStop(n), r.code);
+    pushNow(r.code);
+    ack(cb, { ok: true });
+    checkAutoStop(r.code);
   });
   socket.on('host:kick', ({ playerId } = {}, cb) => {
     const r = hostRoom(cb);
@@ -608,29 +712,25 @@ io.on('connection', (socket) => {
     else q.deleteMark.run(p.id, cell);
     const pr = progressOf(card, marksMap(p.id));
     progressCache.set(p.id, pr);
-    const events = [];
-    let label = null; // full-roster lookup only when someone actually scores
-    const nameOf = () => label || (label = labelMap(q.players.all(r.code))[p.id] || p.name);
-    const mode = r.win_mode === 'blackout' ? 'blackout' : 'line';
-    if (mode === 'line' && pr.lines > 0 && q.insertBingo.run(r.code, p.id, 'bingo', now()).changes) {
-      const order = q.countBingo.get(r.code, 'bingo').c;
-      events.push({ type: 'bingo', name: nameOf(), order, playerId: p.id });
-      log(r.code, `BINGO #${order}: ${nameOf()}`);
+    // A finished card becomes a claim: 'pending' until the host checks it (or confirmed at once if checks are off).
+    const kind = winKind(r);
+    const done = kind === 'blackout' ? pr.filled === pr.total : pr.lines > 0;
+    let claimed = false;
+    if (done && q.insertBingo.run(r.code, p.id, kind, now(), r.verify ? 'pending' : 'verified').changes) {
+      claimed = true;
+      const order = q.countBingo.get(r.code, kind).c;
+      const name = labelMap(q.players.all(r.code))[p.id] || p.name;
+      const fx = { type: 'claim', kind, name, order, playerId: p.id, pending: !!r.verify };
+      // Host, the player and the big screen hear every claim; other phones hear the first 20 (no pop-up storm at 300+).
+      io.to(`host:${r.code}`).to(`p:${p.id}`).to(`screen:${r.code}`).emit('fx', fx);
+      if (order <= 20) io.to(`room:${r.code}`).except(`p:${p.id}`).emit('fx', fx);
+      log(r.code, `${kind.toUpperCase()} claim #${order}: ${name}${r.verify ? ' (waiting for host check)' : ''}`);
+      if (!r.verify) announceWinner(r, p.id);
+      pushRoom(r.code, 200);
     }
-    if (mode === 'blackout' && pr.filled === pr.total && q.insertBingo.run(r.code, p.id, 'blackout', now()).changes) {
-      const order = q.countBingo.get(r.code, 'blackout').c;
-      events.push({ type: 'blackout', name: nameOf(), order, playerId: p.id });
-      log(r.code, `BLACKOUT #${order}: ${nameOf()}`);
-    }
-    // Host hears every call; the whole room hears the first 20 (enough for the race, no pop-up storm at 300+ players);
-    // the player always hears their own.
-    for (const e of events) {
-      io.to(`host:${r.code}`).to(`p:${p.id}`).to(`screen:${r.code}`).emit('fx', e); // the big screen celebrates every winner
-      if (e.order <= 20) io.to(`room:${r.code}`).except(`p:${p.id}`).emit('fx', e);
-    }
-    if (events.some((e) => e.order <= 50)) pushRoom(r.code, 200); // phones show the top 50 winners
     pushHost(r.code);
     ack(cb, { ok: true, progress: pr });
+    if (claimed && !r.verify) checkAutoStop(r.code);
   });
   socket.on('player:clearAll', (_, cb) => {
     const c = me(cb);

@@ -98,16 +98,31 @@
     if (!ME) return;
     if (fx.type === 'start') toast('Game on! Go find people 🏃');
     if (fx.type === 'end') {
-      toast('The host ended the game');
+      toast(fx.reason === 'auto' ? `We have our ${fx.winners} winners — game over! 🏁` : 'The host ended the game');
       for (const i in photos) if (String(photos[i]).startsWith('/photo/')) delete photos[i]; // server copies are deleted at the end
     }
     if (fx.type === 'resume') toast('The game is back on!');
-    if (fx.type === 'bingo' || fx.type === 'blackout') {
-      const word = fx.type === 'bingo' ? 'BINGO' : 'BLACKOUT';
-      if (fx.playerId === ME.id) showBanner(`${word}! You’re #${fx.order} 🎉 Show the host your card.`);
-      else toast(`${fx.type === 'bingo' ? '🎉' : '⭐'} ${fx.name} called ${word}! (#${fx.order})`);
+    const word = fx.kind === 'blackout' ? 'BLACKOUT' : 'BINGO';
+    if (fx.type === 'claim') {
+      if (fx.playerId === ME.id) { ME.claim = { status: fx.pending ? 'pending' : 'verified', place: 0 }; claimBanner(); }
+      else if (fx.pending) toast(`🔔 ${fx.name} called ${word}!`);
+    }
+    if (fx.type === 'winner') {
+      if (fx.playerId === ME.id) { ME.claim = { status: 'verified', place: fx.place }; claimBanner(); }
+      else toast(`🎉 ${fx.name} is winner #${fx.place}!`);
+    }
+    if (fx.type === 'rejected') {
+      ME.claim = null;
+      showBanner('The host couldn’t confirm your card. Check your names and photos, fix any square, and you’ll be checked again.', false, 'bad');
     }
   });
+  // Banner for this player's own finish: waiting for the host's check, or confirmed with their place.
+  function claimBanner() {
+    if (!ME || !ME.claim || (R && R.status === 'ended')) return;
+    const word = R && R.winMode === 'blackout' ? 'BLACKOUT' : 'BINGO';
+    if (ME.claim.status === 'pending') showBanner(`${word}! 🕵️ The host is checking your card — keep your phone handy.`);
+    else if (ME.claim.place) showBanner(`✓ Confirmed! You’re winner #${ME.claim.place} 🎉`);
+  }
   async function setMe(m) {
     const firstCard = m.card && (!ME || !ME.card);
     ME = m;
@@ -115,11 +130,13 @@
     for (const c in pending) ME.marks[c] = pending[c].n || pending[c].p ? { n: pending[c].n, p: pending[c].p } : undefined;
     await loadPhotos();
     if (firstCard) prevLines = lines().length;
+    if (ME.claim) setTimeout(claimBanner); // e.g. after a refresh
   }
   function forget() { token = null; LS.del('hb2:p:' + code); }
 
   // ── Join ──
   function showJoin() {
+    if (code) fetch(`/api/rooms/${encodeURIComponent(code)}`).then((r) => (r.ok ? r.json() : null)).then((g) => { if (g && !R) { Theme.apply(g.theme); $('#title').textContent = g.title; } }).catch(() => {});
     $('#code').value = code;
     show('join');
     (code ? $('#name') : $('#code')).focus();
@@ -159,6 +176,7 @@
     return L.filter((l) => l.every(on));
   }
   function render(prevStatus) {
+    if (R && R.theme) Theme.apply(R.theme);
     if (!ME || !R) return;
     if (R.status === 'lobby' || !ME.card) {
       $('#waitH').textContent = `You’re in, ${ME.name}!`;
@@ -178,7 +196,7 @@
     g.innerHTML = ME.card.map((c, i) => {
       const m = ME.marks[i];
       const ph = photos[i];
-      return `<button class="cell${c.f ? ' free' : ''}${m && m.n ? ' got' : ''}${ph ? ' has' : ''}${win.has(i) ? ' win' : ''}${pending[i] ? ' pend' : ''}" data-i="${i}"${c.f ? ' disabled' : ''}>${ph ? `<img class="ph" src="${ph}" alt="">` : ''}<span class="q">${esc(c.t)}</span>${m && m.n ? `<span class="nm">${esc(m.n)}</span>` : ''}</button>`;
+      return `<button class="cell${c.f ? ' free' : ''}${m && m.n ? ' got' : ''}${ph ? ' has' : ''}${win.has(i) ? ' win' : ''}${pending[i] ? ' pend' : ''}" data-i="${i}"${c.f ? ' disabled' : ''}>${ph ? `<img class="ph" src="${ph}" alt="">` : ''}<span class="q">${esc(c.f ? Theme.free() : c.t)}</span>${m && m.n ? `<span class="nm">${esc(m.n)}</span>` : ''}</button>`;
     }).join('');
     const f = ME.card.filter((c, i) => on(i)).length;
     const t = ME.card.length;
@@ -194,12 +212,12 @@
     if (ended) {
       const top = R.winners.slice(0, 5).map((w, i) => `#${i + 1} ${w.name}`).join(' · ');
       showBanner(`Game over${top ? ' — Winners: ' + top : ''}`, true);
-    } else if (prevStatus === 'ended') $('#banner').hidden = true;
+    } else if (prevStatus === 'ended') { $('#banner').hidden = true; claimBanner(); }
   }
-  function showBanner(text, ended) {
+  function showBanner(text, ended, kind) {
     const el = $('#banner');
     el.textContent = text;
-    el.className = 'banner' + (ended ? ' ended' : ' pop');
+    el.className = 'banner' + (ended ? ' ended' : ' pop') + (kind ? ' ' + kind : '');
     el.hidden = false;
   }
 
@@ -357,8 +375,11 @@
   // Phones (Android especially) block multi-file downloads, so we show finished pictures that can be
   // pressed-and-held to save, plus Share / Download buttons that run straight from the tap.
   const fname = (i) => 'bingo-' + (i + 1) + '-' + ((ME.marks[i] && ME.marks[i].n) || ME.card[i].t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) + '.jpg';
-  const FS = "'Bricolage Grotesque',system-ui,sans-serif";
-  const FH = "'Caveat',cursive,system-ui";
+  // Pictures follow the party theme's colors and fonts.
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  let FS = "'Bricolage Grotesque',system-ui,sans-serif";
+  let FH = "'Caveat',cursive,system-ui";
+  function themeFonts() { FS = css('--f-body') || FS; FH = css('--f-hand') || FH; }
   const loadImg = (src) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
   function wrap(x, text, maxW) {
     const L = [];
@@ -383,11 +404,13 @@
     const cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
     const x = cv.getContext('2d');
-    x.fillStyle = '#2f4bff'; x.fillRect(0, 0, W, H);
-    x.fillStyle = '#fff'; rr(x, pad, 30, W - 2 * pad, 130, 22); x.fill();
-    x.fillStyle = '#d62839'; rr(x, pad, 30, W - 2 * pad, 40, 22); x.fill(); x.fillRect(pad, 50, W - 2 * pad, 20);
-    x.fillStyle = '#fff'; x.font = '800 24px ' + FS; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('Hello, we’re playing', W / 2, 52);
-    x.fillStyle = '#14163a'; x.font = '700 64px ' + FH; x.fillText(R.title, W / 2, 118, W - 2 * pad - 40);
+    themeFonts();
+    const T = { bg: css('--bg') || '#2f4bff', paper: css('--paper') || '#fff', band: css('--band') || '#d62839', ink: css('--ink') || '#14163a', hi: css('--hi') || '#ffd93d', navy: css('--navy') || '#14163a', line: css('--line') || '#c9cffc', onBg: css('--on-bg') || '#fff' };
+    x.fillStyle = T.bg; x.fillRect(0, 0, W, H);
+    x.fillStyle = T.paper; rr(x, pad, 30, W - 2 * pad, 130, 22); x.fill();
+    x.fillStyle = T.band; rr(x, pad, 30, W - 2 * pad, 40, 22); x.fill(); x.fillRect(pad, 50, W - 2 * pad, 20);
+    x.fillStyle = Theme.current() === 'minimal' ? T.paper : '#fff'; x.font = '800 24px ' + FS; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(Theme.META[Theme.current()].band, W / 2, 52);
+    x.fillStyle = Theme.current() === 'youth' ? T.hi : T.ink; x.font = '700 64px ' + FH; x.fillText(R.title, W / 2, 118, W - 2 * pad - 40);
     const ims = await Promise.all(ME.card.map((c, i) => (photos[i] ? loadImg(photos[i]) : null)));
     const win = new Set(lines().flat());
     const fs = z === 3 ? 34 : z === 4 ? 26 : 21;
@@ -395,33 +418,37 @@
       const X = pad + (i % z) * (cs + gap), Y = head + Math.floor(i / z) * (cs + gap);
       const m = ME.marks[i];
       x.save(); rr(x, X, Y, cs, cs, 14); x.clip();
-      x.fillStyle = c.f ? '#ffd93d' : '#fff'; x.fillRect(X, Y, cs, cs);
+      x.fillStyle = c.f ? T.band : T.paper; x.fillRect(X, Y, cs, cs);
       if (ims[i]) cover(x, ims[i], X, Y, cs, cs);
       x.textAlign = c.f ? 'center' : 'left'; x.textBaseline = 'top';
       x.font = (c.f ? '800 ' : '600 ') + fs + 'px ' + FS;
-      const L = wrap(x, c.t, cs - 20).slice(0, ims[i] ? 2 : 5);
+      const L = wrap(x, c.f ? Theme.free() : c.t, cs - 20).slice(0, ims[i] ? 2 : 5);
       if (ims[i]) { x.fillStyle = 'rgba(20,22,58,.78)'; x.fillRect(X, Y, cs, L.length * fs * 1.2 + 16); }
-      x.fillStyle = ims[i] ? '#fff' : m && m.n ? 'rgba(20,22,58,.6)' : '#14163a';
+      x.fillStyle = ims[i] || c.f ? '#fff' : T.ink;
+      if (m && m.n && !ims[i]) x.globalAlpha = 0.65;
       L.forEach((t, j) => x.fillText(t, c.f ? X + cs / 2 : X + 10, (c.f ? Y + cs / 2 - fs / 2 : Y + 8) + j * fs * 1.2));
+      x.globalAlpha = 1;
       if (m && m.n) {
         const nh = fs * 1.5;
-        x.fillStyle = '#ffd93d'; x.fillRect(X + 6, Y + cs - nh - 6, cs - 12, nh);
-        x.fillStyle = '#14163a'; x.font = '700 ' + Math.round(fs * 1.3) + 'px ' + FH; x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillStyle = T.hi; x.fillRect(X + 6, Y + cs - nh - 6, cs - 12, nh);
+        x.fillStyle = T.navy; x.font = '700 ' + Math.round(fs * 1.3) + 'px ' + FH; x.textAlign = 'center'; x.textBaseline = 'middle';
         x.fillText(m.n, X + cs / 2, Y + cs - nh / 2 - 6, cs - 20);
       }
       x.restore();
-      x.lineWidth = win.has(i) ? 7 : 3; x.strokeStyle = win.has(i) ? '#d62839' : '#c9cffc'; rr(x, X, Y, cs, cs, 14); x.stroke();
+      x.lineWidth = win.has(i) ? 7 : 3; x.strokeStyle = win.has(i) ? T.band : T.line; rr(x, X, Y, cs, cs, 14); x.stroke();
     });
     const f = ME.card.filter((c, i) => on(i)).length;
-    x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillStyle = T.onBg; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.font = '700 30px ' + FS; x.fillText(`${ME.name} · ${f} of ${ME.card.length} squares · ${lines().length} line${lines().length === 1 ? '' : 's'}`, W / 2, H - foot / 2 - 10, W - 2 * pad);
-    x.font = '600 22px ' + FS; x.fillStyle = 'rgba(255,255,255,.8)'; x.fillText(new Date().toLocaleDateString(), W / 2, H - foot / 2 + 26);
+    x.font = '600 22px ' + FS; x.globalAlpha = 0.8; x.fillText(new Date().toLocaleDateString(), W / 2, H - foot / 2 + 26);
+    x.globalAlpha = 1;
     return cv.toDataURL('image/jpeg', 0.9);
   }
   // A captioned picture for one photo (prompt on top, name tag at the bottom).
   async function tilePicture(i, nameOverride, srcOverride) {
     const im = await loadImg(srcOverride || photos[i]);
     if (!im) return null;
+    themeFonts();
     const Z = 1080, cv = document.createElement('canvas');
     cv.width = cv.height = Z;
     const x = cv.getContext('2d');

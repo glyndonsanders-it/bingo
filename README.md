@@ -10,6 +10,16 @@ Tested with **300 and 600 simulated players in one room** (see *Scale* below).
 - **Customizable categories:** the four starter lists (Icebreakers, Team & work, Party, Classroom) are fully editable. You can rename them, change the card title, edit the squares, duplicate, delete, add new categories, restore the built-ins, and export or import them as a JSON file to use on another device. You can also save any squares you typed as a new category.
 - Card size 3 × 3, 4 × 4 or 5 × 5, with an optional free center. If you add more squares than a card holds, every player gets a different shuffled card.
 - **How to win:** **1 line** (any row, column or diagonal) or **Blackout** (fill the whole card). It locks when the game starts.
+- **Party themes:** pick **General**, **Christmas**, **Fun activities**, **Team building**, **Youthful** or **Minimal**. Each theme has its own colors, fonts, card style and name-tag style, plus a different **big-screen layout**:
+  - **Christmas:** centered festive layout, falling snow, gift-wrapped QR
+  - **Fun activities:** QR on the right like a sticker, polaroid photos, confetti
+  - **Team building:** dashboard with a header bar, side stats and numbered squares
+  - **Youthful:** neon sticker collage with a giant code
+  - **Minimal:** black and white, lots of whitespace
+
+  You can change the theme at any time, even mid-game; every phone and the big screen restyle instantly.
+- **Checking cards:** with **Check each finished card before it counts** on (the default), a finished card shows as **"needs your check."** You open it, look at the names and photos, then tap **✓ Confirm winner** or **✗ Not valid**. A rejected player is told to fix their card and is checked again when they finish. Places follow the order players finished. The big screen shows "Checking: Ana…" and only celebrates once you confirm.
+- **End automatically after N winners** (e.g. 3 or 5, or Off). You can change this mid-game too. The game ends by itself once the first N finishers are confirmed; an earlier unchecked card keeps it open, so nobody is skipped.
 - **Room codes:** you get a random 5-character code (no look-alike characters such as 0/O or 1/I), or you can type your own (1–5 letters/numbers).
 - A live dashboard with the code, a QR code, the join link, player counts (joined/online), every player's progress, and the winners in the order the server received them. Tap any player to see their card **with their photos**, and tap a photo to enlarge it.
 - **Photo wall:** the newest photos stream in live on the host page.
@@ -77,4 +87,8 @@ BASE=http://localhost:3000 PLAYERS=300 node tests/load-test.js
 BASE=http://localhost:3000 node tests/e2e.js
 ```
 
-The second command is the browser flow test and needs `playwright`.
+```bash
+BASE=http://localhost:3000 node tests/themes.js
+```
+
+The last two are browser tests and need `playwright`: the full game flow, and screenshots of every theme.

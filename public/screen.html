@@ -7,49 +7,58 @@
 <meta name="robots" content="noindex">
 <title>Human Bingo – Big screen</title>
 <link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/themes.css">
 <style>
 html,body{height:100%;overflow:hidden}
-body.screen{background:var(--bg);color:#fff;font-size:1.6vmin}
+body.screen{color:var(--on-bg);font-size:1.6vmin}
 body.idle{cursor:none}
 .view{position:fixed;inset:0;padding:3.5vmin 4vmin;display:none}
 .view.on{display:grid}
-.tagb{background:#fff;color:#14163a;border-radius:2vmin;overflow:hidden;box-shadow:0 1vmin 0 rgba(0,0,0,.25);transform:rotate(-1.2deg)}
+.tagb{background:var(--paper);color:var(--ink);border-radius:2vmin;overflow:hidden;box-shadow:0 1vmin 0 rgba(0,0,0,.25);transform:rotate(-1.2deg)}
 .tagb .band{font-size:2.6vmin;padding:.8vmin 2vmin}
-.tagb .tt{font:700 7.5vmin/1.1 'Caveat',cursive;text-align:center;padding:1.2vmin 3vmin 1.8vmin;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tagb .tt{font:700 7.5vmin/1.1 var(--f-hand);text-align:center;padding:1.2vmin 3vmin 1.8vmin;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .qrbox{background:#fff;border-radius:2.4vmin;padding:1.6vmin;box-shadow:0 1vmin 0 rgba(0,0,0,.25)}
 .qrbox img{display:block;width:100%;height:100%}
-.code{font:800 15vmin/1 'Bricolage Grotesque',system-ui,sans-serif;letter-spacing:.14em;color:var(--hi);text-shadow:0 .8vmin 0 rgba(0,0,0,.25)}
+.code{font:800 15vmin/1 var(--f-display);letter-spacing:.14em;color:var(--hi);text-shadow:0 .8vmin 0 rgba(0,0,0,.25)}
 .url{font-weight:700;font-size:3.4vmin;opacity:.95}
-.big-n{font:800 11vmin/1 'Bricolage Grotesque',system-ui,sans-serif}
+.big-n{font:800 11vmin/1 var(--f-display)}
 .lbl{font-weight:700;font-size:3vmin;opacity:.9}
 /* lobby */
-#lobbyV{grid-template-columns:1fr 1.15fr;gap:5vmin;align-items:center}
-#lobbyV .left{display:grid;gap:3.5vmin;justify-items:center}
-#lobbyV .left .qrbox{width:52vmin;height:52vmin}
-#lobbyV .scan{font:800 5vmin/1 'Bricolage Grotesque',system-ui,sans-serif}
-#lobbyV .right{display:grid;gap:3vmin;align-content:center}
-.names{display:flex;flex-wrap:wrap;gap:1.2vmin;max-height:30vmin;overflow:hidden}
-.names span{background:#fff;color:#14163a;font:700 3.6vmin/1 'Caveat',cursive;padding:.8vmin 1.8vmin;border-radius:1.2vmin}
+/* Layout: each piece has a grid area, so every party theme can arrange the screen its own way (see themes.css). */
+#lobbyV{grid-template-columns:1fr 1.15fr;grid-template-rows:auto auto auto auto 1fr;grid-template-areas:"scan tag" "qr code" "qr rule" "qr count" "qr names";column-gap:5vmin;row-gap:2.4vmin;align-content:center}
+.a-scan{grid-area:scan;justify-self:center;align-self:end;font:800 5vmin/1 var(--f-display)}
+.a-qr{grid-area:qr;width:52vmin;height:52vmin;justify-self:center;align-self:start}
+.a-tag{grid-area:tag}
+.a-code{grid-area:code}
+.a-rule{grid-area:rule}
+.a-count{grid-area:count}
+.a-names{grid-area:names}
+.names{display:flex;flex-wrap:wrap;gap:1.2vmin;max-height:30vmin;overflow:hidden;align-content:flex-start}
+.names span{background:var(--paper);color:var(--ink);font:700 3.6vmin/1 var(--f-hand);padding:.8vmin 1.8vmin;border-radius:1.2vmin}
 .names span.new{animation:popn .6s cubic-bezier(.2,1.6,.4,1)}
 @keyframes popn{from{transform:scale(0) rotate(-8deg)}}
-.rule{background:var(--hi);color:#14163a;font-weight:800;font-size:3.2vmin;border-radius:1.6vmin;padding:1.2vmin 2.2vmin;justify-self:start}
+.rule{background:var(--hi);color:var(--navy);font-weight:800;font-size:3.2vmin;border-radius:1.6vmin;padding:1.2vmin 2.2vmin;justify-self:start}
 /* live */
-#liveV{grid-template-rows:auto 1fr;gap:3vmin}
-#liveV .top{display:grid;grid-template-columns:auto 1fr auto;gap:3vmin;align-items:center}
-#liveV .top .tagb .tt{font-size:5vmin}
-#liveV .join{display:flex;gap:2vmin;align-items:center;background:rgba(255,255,255,.12);border-radius:2vmin;padding:1.4vmin 2vmin}
-#liveV .join .qrbox{width:17vmin;height:17vmin;padding:.8vmin;border-radius:1.4vmin}
-#liveV .join .code{font-size:6.5vmin}
-#liveV .main{display:grid;grid-template-columns:1fr 1.7fr;gap:3vmin;min-height:0}
-#liveV.nophotos .main{grid-template-columns:1fr}
+#liveV{grid-template-columns:repeat(6,1fr);grid-template-rows:auto 1fr;grid-template-areas:"tag tag rule rule join join" "win win wall wall wall wall";gap:3vmin}
+#liveV.nophotos{grid-template-areas:"tag tag rule rule join join" "win win win win win win"}
 #liveV.nophotos .wallbox{display:none}
+.l-tag{grid-area:tag;align-self:center}
+.l-tag .tt{font-size:5vmin}
+.l-rule{grid-area:rule;display:grid;gap:1.2vmin;justify-items:center;align-content:center}
+.l-rule .rule{justify-self:center}
+.l-join{grid-area:join;display:flex;gap:2vmin;align-items:center;background:rgba(255,255,255,.12);border-radius:2vmin;padding:1.4vmin 2vmin;justify-self:end}
+.l-join .qrbox{width:17vmin;height:17vmin;padding:.8vmin;border-radius:1.4vmin;flex:none}
+.l-join .code{font-size:6.5vmin}
+.l-win{grid-area:win}
+.l-wall{grid-area:wall}
 .panelb{background:rgba(255,255,255,.12);border-radius:2.4vmin;padding:2.4vmin;min-height:0;display:grid;grid-template-rows:auto 1fr;gap:1.6vmin}
 .panelb h2{margin:0;font-size:4vmin}
 .wl{list-style:none;margin:0;padding:0;display:grid;gap:1.2vmin;align-content:start;overflow:hidden}
 .wl li{display:flex;align-items:center;gap:1.6vmin;background:#fff;color:#14163a;border-radius:1.4vmin;padding:1vmin 1.6vmin;font-weight:800;font-size:3.4vmin}
-.wl li .o{background:var(--hi);border-radius:1vmin;padding:.2vmin 1.2vmin;min-width:6vmin;text-align:center}
+.wl li .o{color:var(--navy);background:var(--hi);border-radius:1vmin;padding:.2vmin 1.2vmin;min-width:6vmin;text-align:center}
 .wl li.new{animation:popn .6s cubic-bezier(.2,1.6,.4,1)}
 #liveV.nophotos .wl{grid-template-columns:repeat(2,1fr)}
+.wl li{background:var(--paper);color:var(--ink)}
 .empty{opacity:.85;font-size:3vmin;font-weight:600}
 .wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(24vmin,1fr));align-content:start;gap:1.4vmin;min-height:0;overflow:hidden}
 .wall figure{margin:0;position:relative;border-radius:1.6vmin;overflow:hidden;background:rgba(255,255,255,.12);aspect-ratio:1}
@@ -58,23 +67,25 @@ body.idle{cursor:none}
 .wall figcaption{position:absolute;left:0;right:0;bottom:0;background:rgba(20,22,58,.8);font-weight:700;font-size:1.9vmin;padding:.8vmin 1vmin;line-height:1.25}
 /* ended */
 #endV{grid-template-rows:auto auto 1fr;gap:3vmin;justify-items:center;text-align:center}
-#endV h1{margin:0;font:800 10vmin/1 'Bricolage Grotesque',system-ui,sans-serif;color:var(--hi);text-shadow:0 1vmin 0 rgba(0,0,0,.25)}
+#endV h1{margin:0;font:800 10vmin/1 var(--f-display);color:var(--hi);text-shadow:0 1vmin 0 rgba(0,0,0,.25)}
 .podium{display:flex;gap:3vmin;align-items:flex-end;justify-content:center}
-.podium div{background:#fff;color:#14163a;border-radius:2vmin 2vmin 0 0;width:28vmin;display:grid;align-content:start;justify-items:center;padding:2vmin;gap:1vmin}
-.podium .p1{height:34vmin;background:var(--hi)}.podium .p2{height:26vmin}.podium .p3{height:20vmin}
+.podium div{background:var(--paper);color:var(--ink);border-radius:2vmin 2vmin 0 0;width:28vmin;display:grid;align-content:start;justify-items:center;padding:2vmin;gap:1vmin}
+.podium .p1{height:34vmin;background:var(--hi);color:var(--navy)}.podium .p2{height:26vmin}.podium .p3{height:20vmin}
 .podium b{font-size:7vmin;line-height:1}
-.podium span{font:700 5vmin/1.05 'Caveat',cursive;word-break:break-word}
+.podium span{font:700 5vmin/1.05 var(--f-hand);word-break:break-word}
 .rest{display:flex;flex-wrap:wrap;gap:1.2vmin;justify-content:center;max-width:90vw;font-weight:700;font-size:2.8vmin}
 .rest span{background:rgba(255,255,255,.15);border-radius:1vmin;padding:.6vmin 1.4vmin}
 /* winner celebration */
 #celebrate{position:fixed;inset:0;z-index:20;display:grid;place-items:center;text-align:center;background:rgba(20,22,58,.88);overflow:hidden}
-#celebrate .word{font:800 22vmin/1 'Bricolage Grotesque',system-ui,sans-serif;color:var(--hi);text-shadow:0 1.4vmin 0 var(--band);animation:boom .7s cubic-bezier(.2,1.6,.4,1)}
-#celebrate .who{font:700 13vmin/1.05 'Caveat',cursive;color:#fff;margin-top:2vmin;animation:rise .6s .25s both cubic-bezier(.2,1.4,.4,1)}
+#celebrate .word{font:800 22vmin/1 var(--f-display);color:var(--hi);text-shadow:0 1.4vmin 0 var(--band);animation:boom .7s cubic-bezier(.2,1.6,.4,1)}
+#celebrate .who{font:700 13vmin/1.05 var(--f-hand);color:#fff;margin-top:2vmin;animation:rise .6s .25s both cubic-bezier(.2,1.4,.4,1)}
 #celebrate .place{font-weight:800;font-size:4.5vmin;margin-top:2vmin;opacity:.95;animation:rise .6s .45s both}
 @keyframes boom{0%{transform:scale(3) rotate(-10deg);opacity:0}100%{transform:none;opacity:1}}
 @keyframes rise{from{transform:translateY(6vmin);opacity:0}}
 .conf{position:absolute;top:-4vmin;width:1.6vmin;height:2.4vmin;border-radius:.3vmin;animation:fall linear forwards}
 @keyframes fall{to{transform:translateY(112vh) rotate(720deg)}}
+.checking{background:var(--hi);color:var(--navy);font-weight:800;font-size:2.6vmin;border-radius:1.2vmin;padding:1vmin 1.6vmin;margin:0 0 1.2vmin}
+.ping{position:fixed;left:50%;top:2vmin;transform:translateX(-50%);z-index:15;background:var(--hi);color:var(--navy);font-weight:800;font-size:3.4vmin;border-radius:1.6vmin;padding:1.4vmin 3vmin;box-shadow:0 .8vmin 0 rgba(0,0,0,.25);animation:rise .4s both}
 #fsBtn{position:fixed;right:2vmin;bottom:2vmin;z-index:30;font-size:2.2vmin}
 #err{position:fixed;inset:0;display:none;place-items:center;font-size:3vmin;font-weight:700;text-align:center;padding:5vmin}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}.conf{display:none}}
@@ -84,29 +95,21 @@ body.idle{cursor:none}
 <div id="err" role="alert"></div>
 
 <section class="view" id="lobbyV" aria-label="Join screen">
-  <div class="left">
-    <div class="scan">Scan to join</div>
-    <div class="qrbox"><img id="qrL" alt="QR code to join"></div>
-  </div>
-  <div class="right">
-    <div class="tagb"><div class="band">Hello, we’re playing</div><div class="tt" data-title></div></div>
-    <div><div class="url" data-url></div><div class="code" data-code></div></div>
-    <div class="rule" data-rule></div>
-    <div><span class="big-n" data-count>0</span> <span class="lbl" data-countl>players in</span></div>
-    <div class="names" id="names"></div>
-  </div>
+  <div class="a-scan scan">Scan to join</div>
+  <div class="a-qr qrbox"><img id="qrL" alt="QR code to join"></div>
+  <div class="a-tag tagb"><div class="band" data-band>Hello, we’re playing</div><div class="tt" data-title></div></div>
+  <div class="a-code"><div class="url" data-url></div><div class="code" data-code></div></div>
+  <div class="a-rule rule" data-rule></div>
+  <div class="a-count"><span class="big-n" data-count>0</span> <span class="lbl" data-countl>players in</span></div>
+  <div class="a-names names" id="names"></div>
 </section>
 
 <section class="view" id="liveV" aria-label="Game in progress">
-  <div class="top">
-    <div class="tagb"><div class="band">Hello, we’re playing</div><div class="tt" data-title></div></div>
-    <div style="display:grid;gap:1.2vmin;justify-items:center"><div class="rule" data-rule style="justify-self:center"></div><div class="lbl"><span data-count>0</span> players</div></div>
-    <div class="join"><div class="qrbox"><img id="qrS" alt="QR code to join"></div><div><div class="lbl">Late? Join at</div><div class="url" data-url style="font-size:2.4vmin"></div><div class="code" data-code></div></div></div>
-  </div>
-  <div class="main">
-    <div class="panelb"><h2 data-winh>Winners</h2><ol class="wl" id="wl"></ol></div>
-    <div class="panelb wallbox"><h2>Photo wall</h2><div class="wall" id="wall"></div></div>
-  </div>
+  <div class="l-tag tagb"><div class="band" data-band>Hello, we’re playing</div><div class="tt" data-title></div></div>
+  <div class="l-rule"><div class="rule" data-rule></div><div class="lbl"><span data-count>0</span> players</div></div>
+  <div class="l-join join"><div class="qrbox"><img id="qrS" alt="QR code to join"></div><div><div class="lbl">Late? Join at</div><div class="url" data-url style="font-size:2.4vmin"></div><div class="code" data-code></div></div></div>
+  <div class="l-win panelb"><h2 data-winh>Winners</h2><div><div class="checking" id="checking" hidden></div><ol class="wl" id="wl"></ol></div></div>
+  <div class="l-wall panelb wallbox"><h2>Photo wall</h2><div class="wall" id="wall"></div></div>
 </section>
 
 <section class="view" id="endV" aria-label="Game over">
@@ -121,6 +124,7 @@ body.idle{cursor:none}
 <div id="celebrate" hidden aria-live="assertive"></div>
 <button class="btn big" id="fsBtn">⛶ Full screen</button>
 
+<script src="/theme.js"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/screen.js"></script>
 </body>

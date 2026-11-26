@@ -34,12 +34,14 @@
       photos = [fx].concat(photos.filter((p) => !(p.playerId === fx.playerId && p.cell === fx.cell))).slice(0, 24);
       renderWall(fx);
     }
-    if (fx.type === 'bingo' || fx.type === 'blackout') celebrate(fx);
+    if (fx.type === 'claim' && fx.pending) ping(`🔔 ${fx.name} called ${fx.kind === 'blackout' ? 'BLACKOUT' : 'BINGO'}! Checking their card…`);
+    if (fx.type === 'winner') celebrate(fx); // the big moment waits for the host's confirmation
     if (fx.type === 'end') { photos = []; renderWall(); }
   });
 
   function apply(s) {
     S = s;
+    Theme.apply(s.theme);
     const url = `${location.host}/join`;
     setAll('[data-title]', s.title);
     setAll('[data-code]', s.code);
@@ -56,6 +58,9 @@
     $('#liveV').classList.toggle('nophotos', !s.showPhotos);
     renderNames();
     renderWinners();
+    const ch = $('#checking');
+    ch.hidden = !s.checking.length;
+    ch.textContent = `⏳ Checking: ${s.checking.join(', ')}`;
     renderEnd();
     if (s.status !== 'live') { photos = []; }
     renderWall();
@@ -112,9 +117,17 @@
     const colors = ['#ffd93d', '#d62839', '#ffffff', '#7cf0ff', '#9fff7a'];
     let conf = '';
     for (let i = 0; i < 70; i++) conf += `<i class="conf" style="left:${Math.random() * 100}%;background:${colors[i % colors.length]};animation-duration:${2.2 + Math.random() * 2}s;animation-delay:${Math.random() * 0.8}s"></i>`;
-    box.innerHTML = `${conf}<div><div class="word">${fx.type === 'blackout' ? 'BLACKOUT!' : 'BINGO!'}</div><div class="who">${esc(fx.name)}</div><div class="place">${ordinal(fx.order)} to finish</div></div>`;
+    box.innerHTML = `${conf}<div><div class="word">${fx.kind === 'blackout' ? 'BLACKOUT!' : 'BINGO!'}</div><div class="who">${esc(fx.name)}</div><div class="place">✓ Confirmed · ${ordinal(fx.place)} place</div></div>`;
     box.hidden = false;
     setTimeout(next, queue.length > 3 ? 2200 : 4500); // speed up if many winners arrive at once
+  }
+  // Small, non-blocking note at the top of the screen.
+  function ping(text) {
+    const el = document.createElement('div');
+    el.className = 'ping';
+    el.textContent = text;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 5000);
   }
   function ordinal(n) { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
 

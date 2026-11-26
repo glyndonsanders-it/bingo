@@ -8,13 +8,14 @@
 <meta name="robots" content="noindex">
 <title>Human Bingo – Host</title>
 <link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/themes.css">
 <style>
 .hostgrid{display:grid;gap:14px;grid-template-columns:minmax(300px,1fr) minmax(320px,1.35fr);align-items:start}
 .hostgrid .panel{margin:0}
 @media (max-width:860px){.hostgrid{grid-template-columns:1fr}}
 .col{display:grid;gap:14px}
 .codecard{text-align:center}
-.bigcode{font:800 clamp(2.6rem,9vw,4.4rem)/1 'Bricolage Grotesque',system-ui,sans-serif;letter-spacing:.18em;color:var(--band);margin:6px 0 10px;padding-left:.18em}
+.bigcode{font:800 clamp(2.6rem,9vw,4.4rem)/1 var(--f-display);letter-spacing:.18em;color:var(--band);margin:6px 0 10px;padding-left:.18em}
 .qr{width:min(100%,260px);aspect-ratio:1;margin:0 auto 10px;display:block;background:#fff;border-radius:12px;padding:8px}
 .joinurl{font-weight:700;word-break:break-all;margin:0 0 12px}
 .stats{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 14px}
@@ -55,6 +56,13 @@
 #cardGrid{display:grid;gap:6px;margin:10px 0}
 #cardGrid .cell{cursor:default}
 #cardGrid .cam{position:absolute;right:4px;top:3px;font-size:.8rem}
+.autostop{margin:14px 0 0;padding:12px;border-radius:12px;background:var(--soft)}
+.autostop input{width:5rem}
+.checknote{background:var(--hi);color:var(--navy);border-radius:10px;padding:8px 12px;font-weight:800;margin:0 0 10px}
+.wins li.pend{background:#fff6d1;outline:2px solid var(--hi)}
+.wins .chk{margin-left:8px;min-height:34px;padding:4px 12px;font-size:.85rem}
+.badge.wait{background:#fff6d1;border:1px solid #e0b800}
+.verifybar{background:#fff6d1;color:#14163a;border-radius:12px;padding:12px 14px;margin:0 0 12px}
 .bigscreen{display:grid;gap:4px;margin:14px 0 0;padding:12px;border-radius:12px;background:var(--soft)}
 .wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
 .wall figure{margin:0;position:relative;border-radius:10px;overflow:hidden;background:var(--soft);aspect-ratio:1;cursor:zoom-in}
@@ -130,10 +138,20 @@ body.pr #sheet{display:block}
         <button class="btn alt" id="resumeBtn" hidden>Resume game</button>
       </div>
       <p class="hint muted noproj" id="gameHint"></p>
+      <div class="autostop noproj">
+        <label for="stopAfter"><b>End the game automatically</b> after</label>
+        <span class="row tight" style="margin:6px 0 0">
+          <input type="number" id="stopAfter" min="0" max="100" value="0" aria-describedby="stopHint">
+          <span>confirmed winners</span>
+          <button class="btn alt" data-stop="3">3</button><button class="btn alt" data-stop="5">5</button><button class="btn alt" data-stop="0">Off</button>
+        </span>
+        <span class="hint muted" id="stopHint"></span>
+      </div>
     </section>
     <section class="panel">
       <h2 id="winsH">Bingo calls</h2>
-      <p>In the order the server received them. Tap one to check that player’s card.</p>
+      <p>In the order players finished. Tap one to open their card.</p>
+      <div class="checknote" id="checkNote" hidden></div>
       <ol class="wins" id="wins"></ol>
     </section>
     <section class="panel" id="wallPanel">
@@ -162,6 +180,8 @@ body.pr #sheet{display:block}
   <h2 id="setH">1. Build your game</h2>
   <p id="setP">Pick a category or write your own squares. Add more squares than a card holds and every player gets a different card.</p>
   <div class="locked-note" id="lockedNote" hidden>🔒 Squares are locked while the game is running.</div>
+  <label style="display:block;margin:0 0 6px">Party theme <span class="muted" style="font-weight:500">— changes the look on every phone and the big screen, any time</span></label>
+  <div class="themes" id="themes" role="group" aria-label="Party theme"></div>
   <div class="row">
     <label for="size">Card size</label>
     <select id="size"><option value="3">3 × 3</option><option value="4">4 × 4</option><option value="5">5 × 5</option></select>
@@ -170,6 +190,10 @@ body.pr #sheet{display:block}
   <div class="row">
     <label for="winMode">How to win</label>
     <select id="winMode"><option value="line">1 line — a row, column or diagonal</option><option value="blackout">Blackout — fill the whole card</option></select>
+  </div>
+  <div class="row">
+    <label><input type="checkbox" id="verify" checked> Check each finished card before it counts</label>
+    <span class="muted" style="font-size:.9rem">You confirm names and photos, then the winner is announced.</span>
   </div>
   <div class="row tight" style="margin:0 0 6px;justify-content:space-between"><label>Categories</label><button class="btn alt" id="manageCats">✏️ Edit categories</button></div>
   <div class="chips" id="chips" role="group" aria-label="Categories"></div>
@@ -229,10 +253,15 @@ body.pr #sheet{display:block}
   <h3 id="cardH"></h3>
   <p class="sub" id="cardSub"></p>
   <div id="cardGrid"></div>
+  <div class="verifybar" id="verifyBar" hidden>
+    <b>Is this card correct?</b> Check the names and photos match the squares.
+    <div class="row tight" style="justify-content:flex-start;margin:8px 0 0"><button class="btn big" id="verifyYes">✓ Confirm winner</button><button class="btn alt" id="verifyNo">✗ Not valid</button></div>
+  </div>
   <div class="row"><button class="btn alt red" id="kickBtn" hidden>Remove player</button><button class="btn" id="cardClose">Close</button></div>
 </dialog>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="/theme.js"></script>
 <script src="/categories.js"></script>
 <script src="/host.js"></script>
 </body>

@@ -37,13 +37,17 @@
   }
   function readForm() {
     const size = +$('#size').value;
-    return { title: $('#title').value.trim() || 'Find Someone Who…', size, free: $('#free').checked && size % 2 === 1, winMode: $('#winMode').value, prompts: list() };
+    return { title: $('#title').value.trim() || 'Find Someone Who…', size, free: $('#free').checked && size % 2 === 1, winMode: $('#winMode').value, theme: Theme.current(), verify: $('#verify').checked, stopAfter: +$('#stopAfter').value || 0, prompts: list() };
   }
   function fillForm(s) {
     $('#title').value = s.title;
     $('#size').value = s.size;
     $('#free').checked = !!s.free;
     $('#winMode').value = s.winMode === 'blackout' ? 'blackout' : 'line';
+    $('#verify').checked = s.verify !== false;
+    Theme.apply(s.theme);
+    paintThemes();
+    if (document.activeElement !== $('#stopAfter')) $('#stopAfter').value = s.stopAfter || 0;
     $('#prompts').value = (s.prompts || []).join('\n');
     refresh();
   }
@@ -65,8 +69,27 @@
   function locked() { return !!S && S.status !== 'lobby'; }
   function onEdit() { if (S) dirty = true; refresh(); }
   ['#title', '#prompts'].forEach((s) => $(s).addEventListener('input', onEdit));
-  ['#size', '#free', '#winMode'].forEach((s) => $(s).addEventListener('change', onEdit));
+  ['#size', '#free', '#winMode', '#verify'].forEach((s) => $(s).addEventListener('change', onEdit));
 
+  // ── Party theme picker (not locked: the theme can change mid-game) ──
+  function paintThemes() {
+    const cur = Theme.current();
+    $('#themes').innerHTML = Theme.list().map((t) => {
+      const m = Theme.META[t];
+      return `<button class="theme-opt" data-theme="${t}" aria-pressed="${t === cur}"><span class="sw sw-${t}">${m.emoji}</span><span class="tx">${esc(m.name)}<small>${esc(m.desc)}</small></span></button>`;
+    }).join('');
+  }
+  $('#themes').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-theme]');
+    if (!b) return;
+    Theme.apply(b.dataset.theme);
+    paintThemes();
+    if (S) {
+      const r = await emit('host:setTheme', { theme: b.dataset.theme });
+      if (r.ok) toast(`${Theme.META[b.dataset.theme].name} theme is on — phones and the big screen update now`);
+      else toast(r.error, true);
+    } else refresh(); // builder: remembered in the draft
+  });
   function renderChips() {
     $('#chips').innerHTML = cats.map((c) => `<button class="btn alt" data-cat="${esc(c.id)}">${esc(c.name)} <span class="muted">· ${c.p.length}</span></button>`).join('');
   }
@@ -253,8 +276,9 @@
         wall = [fx].concat(wall.filter((w) => !(w.playerId === fx.playerId && w.cell === fx.cell))).slice(0, 40);
         renderWall();
       }
-      if (fx.type === 'bingo') toast(`🎉 BINGO #${fx.order} — ${fx.name}`);
-      if (fx.type === 'blackout') toast(`⭐ BLACKOUT #${fx.order} — ${fx.name}`);
+      if (fx.type === 'claim' && fx.pending) toast(`🔔 ${fx.name} finished — open their card to check it`);
+      if (fx.type === 'winner') toast(`🎉 Winner #${fx.place} — ${fx.name}`);
+      if (fx.type === 'end' && fx.reason === 'auto') toast(`🏁 Game ended automatically — ${fx.winners} winners confirmed`);
     });
     socket.on('disconnect', () => toast('Connection lost — reconnecting…', true));
   }
@@ -291,9 +315,11 @@
   function apply(s) {
     const prevStatus = S && S.status;
     S = s;
-    if (!dirty) fillForm({ title: s.title, size: s.size, free: s.free, winMode: s.winMode, prompts: s.prompts });
+    if (!dirty) fillForm({ title: s.title, size: s.size, free: s.free, winMode: s.winMode, theme: s.theme, verify: s.verify, stopAfter: s.stopAfter, prompts: s.prompts });
+    if (Theme.current() !== s.theme) { Theme.apply(s.theme); paintThemes(); } // the theme isn't part of unsaved edits
+    else if (document.activeElement !== $('#stopAfter')) $('#stopAfter').value = s.stopAfter || 0;
     const lock = locked();
-    ['#title', '#prompts', '#size', '#winMode'].forEach((x) => { $(x).disabled = lock; });
+    ['#title', '#prompts', '#size', '#winMode', '#verify'].forEach((x) => { $(x).disabled = lock; });
     $('#title').readOnly = lock;
     $('#lockedNote').hidden = !lock;
     $('#setP').textContent = lock ? 'These are the squares players are using.' : 'You can change the squares until you start the game.';
@@ -314,29 +340,37 @@
     $('#sPlayers').textContent = s.playerCount;
     $('#sOnline').textContent = s.onlineCount;
     const bo = s.winMode === 'blackout';
-    $('#sBingo').textContent = s.winners.length;
-    $('#sBingoL').textContent = bo ? 'blackouts called' : 'bingos called';
+    const waiting = s.winners.filter((w) => w.status === 'pending').length;
+    $('#sBingo').textContent = s.confirmed;
+    $('#sBingoL').textContent = waiting ? `winners · ${waiting} to check` : 'winners confirmed';
     $('#winsH').textContent = bo ? 'Blackout calls' : 'Bingo calls';
+    $('#checkNote').hidden = !waiting;
+    $('#checkNote').textContent = `⏳ ${waiting} card${waiting === 1 ? '' : 's'} waiting for your check — tap “Check card”.`;
+    $('#stopHint').textContent = s.stopAfter
+      ? `The game ends by itself once the first ${s.stopAfter} finishers are confirmed (${s.confirmed}/${s.stopAfter} so far).`
+      : 'Off — you end the game yourself.';
     if (s.status === 'ended') { wall = []; renderWall(); }
     renderWins();
     renderPlayers();
     if (prevStatus && prevStatus !== s.status && s.status === 'live' && prevStatus === 'lobby') toast(`Game started — ${s.playerCount} cards dealt`);
   }
   function renderWins() {
-    $('#wins').innerHTML = S.winners.map((w, i) => {
-      return `<li data-pid="${esc(w.playerId)}" style="cursor:pointer"><span class="o">#${i + 1}</span><span>${esc(w.name)}</span><span class="k">${w.kind === 'blackout' ? '⭐ Blackout' : '🎉 Bingo'} · ${new Date(w.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span></li>`;
-    }).join('') || `<li class="muted" style="font-weight:600">No ${S.winMode === 'blackout' ? 'blackouts' : 'bingos'} yet.</li>`;
+    const t = (at) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    $('#wins').innerHTML = S.winners.map((w) => (w.status === 'pending'
+      ? `<li class="pend" data-pid="${esc(w.playerId)}" style="cursor:pointer"><span class="o">⏳</span><span>${esc(w.name)}</span><span class="k">needs your check · ${t(w.at)}</span><button class="btn chk">Check card</button></li>`
+      : `<li data-pid="${esc(w.playerId)}" style="cursor:pointer"><span class="o">#${w.place}</span><span>${esc(w.name)}</span><span class="k">✓ ${w.kind === 'blackout' ? 'Blackout' : 'Bingo'} · ${t(w.at)}</span></li>`)).join('')
+      || `<li class="muted" style="font-weight:600">No ${S.winMode === 'blackout' ? 'blackouts' : 'bingos'} yet.</li>`;
   }
   function renderPlayers() {
     const qs = $('#search').value.trim().toLowerCase();
     let ps = S.players.slice();
     if (filter === 'online') ps = ps.filter((p) => p.online);
-    if (filter === 'bingo') ps = ps.filter((p) => p.rank);
+    if (filter === 'bingo') ps = ps.filter((p) => p.rank || p.pending);
     if (qs) ps = ps.filter((p) => p.name.toLowerCase().includes(qs));
-    ps.sort((a, b) => (a.rank || 1e9) - (b.rank || 1e9) || b.filled - a.filled || b.lines - a.lines || a.joinNo - b.joinNo);
+    ps.sort((a, b) => (a.rank || (a.pending ? 5e8 : 1e9)) - (b.rank || (b.pending ? 5e8 : 1e9)) || b.filled - a.filled || b.lines - a.lines || a.joinNo - b.joinNo);
     $('#plist').innerHTML = ps.map((p) => `<button class="prow" data-pid="${esc(p.id)}"><span class="dot ${p.online ? 'on' : ''}" title="${p.online ? 'Online' : 'Offline'}"></span>
       <span style="min-width:0"><span class="nm2">${esc(p.name)}</span>${p.total ? `<span class="meter"><i style="width:${Math.round((p.filled / p.total) * 100)}%"></i></span>` : ''}</span>
-      <span class="badges">${p.total ? `${p.filled}/${p.total}` : 'waiting'}${p.rank ? ` <span class="badge">Winner #${p.rank}</span>` : ''}</span></button>`).join('')
+      <span class="badges">${p.total ? `${p.filled}/${p.total}` : 'waiting'}${p.rank ? ` <span class="badge">Winner #${p.rank}</span>` : p.pending ? ' <span class="badge wait">⏳ Check</span>' : ''}</span></button>`).join('')
       || `<p class="muted">${S.players.length ? 'No players match.' : 'Nobody has joined yet. Share the room code!'}</p>`;
   }
   $('#search').addEventListener('input', () => S && renderPlayers());
@@ -364,6 +398,13 @@
     const r = await emit('host:end');
     if (!r.ok) toast(r.error, true);
   });
+  // Auto-stop: can be changed at any time, even mid-game.
+  async function setStop(n) {
+    const r = await emit('host:setStopAfter', { n });
+    if (!r.ok) toast(r.error, true);
+  }
+  $('#stopAfter').addEventListener('change', () => setStop(+$('#stopAfter').value || 0));
+  document.querySelectorAll('[data-stop]').forEach((b) => b.addEventListener('click', () => { $('#stopAfter').value = b.dataset.stop; setStop(+b.dataset.stop); }));
   $('#resumeBtn').addEventListener('click', async () => {
     const r = await emit('host:resume');
     if (!r.ok) toast(r.error, true);
@@ -395,12 +436,23 @@
       g.innerHTML = r.card.map((c, i) => {
         const m = r.marks[i];
         const url = m && m.p ? photoUrl(pid, i, m.u) : '';
-        return `<div class="cell${c.f ? ' free' : ''}${m && m.n ? ' got' : ''}${url ? ' has ph-cell' : ''}"${url ? ` data-zoom="${esc(url)}" data-cap="${esc(c.t + (m.n ? ' — with ' + m.n : ''))}"` : ''}>${url ? `<img class="ph" src="${esc(url)}" alt="" loading="lazy">` : ''}<span class="q">${esc(c.t)}</span>${m && m.n ? `<span class="nm">${esc(m.n)}</span>` : ''}</div>`;
+        return `<div class="cell${c.f ? ' free' : ''}${m && m.n ? ' got' : ''}${url ? ' has ph-cell' : ''}"${url ? ` data-zoom="${esc(url)}" data-cap="${esc(c.t + (m.n ? ' — with ' + m.n : ''))}"` : ''}>${url ? `<img class="ph" src="${esc(url)}" alt="" loading="lazy">` : ''}<span class="q">${esc(c.f ? Theme.free() : c.t)}</span>${m && m.n ? `<span class="nm">${esc(m.n)}</span>` : ''}</div>`;
       }).join('');
     } else g.innerHTML = '';
     $('#kickBtn').hidden = false;
+    $('#verifyBar').hidden = !(p && p.pending);
     $('#cardDlg').showModal();
   }
+  async function verify(ok) {
+    const p = S.players.find((x) => x.id === cardPid);
+    if (!ok && !confirm(`Mark ${p ? p.name : 'this'}’s card as not valid? They’ll be told to fix it and can finish again.`)) return;
+    const r = await emit('host:verify', { playerId: cardPid, ok });
+    if (!r.ok) return toast(r.error, true);
+    $('#cardDlg').close();
+    if (!ok) toast(`${p ? p.name : 'Player'} was asked to fix their card`);
+  }
+  $('#verifyYes').addEventListener('click', () => verify(true));
+  $('#verifyNo').addEventListener('click', () => verify(false));
   $('#cardClose').addEventListener('click', () => $('#cardDlg').close());
   $('#cardGrid').addEventListener('click', (e) => { const c = e.target.closest('[data-zoom]'); if (c) lightbox(c.dataset.zoom, c.dataset.cap); });
 

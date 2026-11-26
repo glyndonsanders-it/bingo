@@ -16,7 +16,11 @@
   "homepage": "https://github.com/glyndonsanders-it/bingo#readme",
   "dependencies": {
     "@fontsource/bricolage-grotesque": "^5.3.0",
+    "@fontsource/bungee": "^5.3.0",
     "@fontsource/caveat": "^5.3.0",
+    "@fontsource/fredoka": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/mountains-of-christmas": "^5.3.0",
     "express": "^4.22.3",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.4"
